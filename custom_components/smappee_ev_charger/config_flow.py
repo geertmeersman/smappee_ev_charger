@@ -1,15 +1,15 @@
+"""Set up and manage the Smappee Charger configuration flow."""
+
 import logging
 from typing import Any
 
-import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+import voluptuous as vol
 
-from .client import (
-    SmappeeClient,  # Zorg dat je file client.py heet, anders aanpassen naar .smappee_client
-)
+from .client import SmappeeClient
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,13 +21,14 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     }
 )
 
+
 class SmappeeChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Regelt de configuratie-flow voor de Smappee Charger integratie."""
+    """Handle a configuration flow for the Smappee Charger integration."""
 
     VERSION = 1
 
     def __init__(self) -> None:
-        """Initialiseer de config flow."""
+        """Initialize the configuration flow entry parameters."""
         self.username: str | None = None
         self.password: str | None = None
         self.stations: list[dict[str, Any]] = []
@@ -35,7 +36,7 @@ class SmappeeChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Eerste stap: Vraag de gebruiker om zijn Smappee Cloud inloggegevens."""
+        """Prompt the user for their official Smappee Cloud authentication credentials."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -46,28 +47,28 @@ class SmappeeChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 session = async_get_clientsession(self.hass)
                 client = SmappeeClient(self.username, self.password, session)
 
-                # REPARATIE 1: Aangepast naar jouw exacte functienaam 'authenticate'
+                # Execute official credential challenge check
                 authenticated = await client.authenticate()
 
                 if not authenticated:
                     raise CannotConnect
 
-                # REPARATIE 2: Aangepast naar jouw exacte v11 servicelocations functienaam
+                # Extract explicit service location profiles from backend arrays
                 raw_locations = await client.get_service_locations_full_details()
 
-                # Filter hier direct de locaties die een CHARGINGSTATION zijn (zoals in je client-code)
+                # Isolate service location records running as functional charging stations
                 self.stations = [
-                    loc for loc in raw_locations
+                    loc
+                    for loc in raw_locations
                     if loc.get("functionType") == "CHARGINGSTATION"
                 ]
 
                 if not self.stations:
                     raise NoChargingStationsFound
 
-                # Als er exact één laadpaal is, direct toevoegen
+                # Automatically create the configuration entry if exactly one hardware instance is found
                 if len(self.stations) == 1:
                     station = self.stations[0]
-                    # Haal het serienummer veilig op uit de v11 nested dict structuur
                     station_info = station.get("chargingStation", {})
                     serial = station_info.get("serialNumber")
 
@@ -77,7 +78,7 @@ class SmappeeChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             "username": self.username,
                             "password": self.password,
                             "station_id": station["id"],
-                            "serial": serial
+                            "serial": serial,
                         },
                     )
 
@@ -88,7 +89,10 @@ class SmappeeChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except NoChargingStationsFound:
                 errors["base"] = "no_charging_stations_found"
             except Exception as err:
-                _LOGGER.exception("Onverwachte fout tijdens authenticatie: %s", err)
+                _LOGGER.exception(
+                    "Unexpected exception triggered during authentication validation: %s",
+                    err,
+                )
                 errors["base"] = "cannot_connect"
 
         return self.async_show_form(
@@ -98,7 +102,7 @@ class SmappeeChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_select_station(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Tweede stap (optioneel): Laat de gebruiker kiezen als er meerdere laders zijn."""
+        """Prompt the user to isolate their targeted hardware module if multiple units exist."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -112,20 +116,22 @@ class SmappeeChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 serial = station_info.get("serialNumber")
 
                 return self.async_create_entry(
-                    title=selected_station.get("name", f"Smappee Charger {selected_station['id']}"),
+                    title=selected_station.get(
+                        "name", f"Smappee Charger {selected_station['id']}"
+                    ),
                     data={
                         "username": self.username,
                         "password": self.password,
                         "station_id": selected_station["id"],
-                        "serial": serial
+                        "serial": serial,
                     },
                 )
 
-        # Bouw de keuzelijst op voor de dropdown in de UI
+        # Build structural selection dictionaries for the user drop-down panel interface
         station_options = {}
         for station in self.stations:
             station_info = station.get("chargingStation", {})
-            serial = station_info.get("serialNumber", "Onbekend")
+            serial = station_info.get("serialNumber", "Unknown")
             name = station.get("name", f"Station {station['id']}")
             station_options[station["id"]] = f"{name} (S/N: {serial})"
 
@@ -139,8 +145,10 @@ class SmappeeChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+
 class CannotConnect(HomeAssistantError):
-    """Foutmelding voor mislukte verbinding."""
+    """Raise exception if the connection authentication sequence fails."""
+
 
 class NoChargingStationsFound(HomeAssistantError):
-    """Foutmelding voor wanneer er geen laadpalen zijn gevonden."""
+    """Raise exception if zero applicable hardware endpoints are returned inside location arrays."""

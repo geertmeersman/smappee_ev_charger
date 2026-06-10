@@ -1,6 +1,9 @@
+"""Set up and manage Smappee Charger switch entities."""
+
 import asyncio
 import json
 import logging
+from typing import Any
 
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
@@ -13,10 +16,11 @@ from .sensor import SmappeeBaseEntity
 
 _LOGGER = logging.getLogger(__name__)
 
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Stel de Smappee switch entiteiten dynamisch in op basis van ontdekte apparaten."""
+    """Set up Smappee switch entities dynamically based on discovered devices."""
     entry_data = hass.data[DOMAIN][entry.entry_id]
     client = entry_data["client"]
     coordinator = entry_data["coordinator"]
@@ -30,36 +34,54 @@ async def async_setup_entry(
             category = device.get("type", {}).get("category")
             device_id = device.get("id")
 
-            # Maak de schakelaars alleen aan voor apparaten van het type CARCHARGER
+            # Create switch entities exclusively for CARCHARGER devices
             if category == "CARCHARGER" and device_id:
-                _LOGGER.debug("Dynamisch schakelaars aanmaken voor Smappee lader: %s", device_id)
+                _LOGGER.debug(
+                    "Dynamically creating switch entities for Smappee charger: %s",
+                    device_id,
+                )
 
-                entities.extend([
-                    SmappeeAvailabilitySwitch(coordinator, client, entry.title, device_id),
-                    SmappeeOfflineChargingSwitch(coordinator, client, entry.title, device_id)
-                ])
+                entities.extend(
+                    [
+                        SmappeeAvailabilitySwitch(
+                            coordinator, client, entry.title, device_id
+                        ),
+                        SmappeeOfflineChargingSwitch(
+                            coordinator, client, entry.title, device_id
+                        ),
+                    ]
+                )
 
     if entities:
         async_add_entities(entities)
 
 
 class SmappeeAvailabilitySwitch(SmappeeBaseEntity, SwitchEntity):
-    """Schakelaar om de laadpaal algemeen beschikbaar of onbeschikbaar te maken."""
+    """Control the general availability state of the charging station."""
 
     _attr_translation_key = "charger_availability"
     _attr_device_class = SwitchDeviceClass.OUTLET
     _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, coordinator, client, entry_title, device_id):
-        super().__init__(coordinator, client, entry_title, device_id=device_id, device_type="charger", platform_domain="switch")
+    def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
+        """Initialize the Smappee availability switch."""
+        super().__init__(
+            coordinator,
+            client,
+            entry_title,
+            device_id=device_id,
+            device_type="charger",
+            platform_domain="switch",
+        )
 
     @property
-    def unique_id(self):
+    def unique_id(self) -> str:
+        """Return a unique ID for this switch entity."""
         return f"{self.device_id}_charger_availability_switch"
 
     @property
     def is_on(self) -> bool:
-        """Geef True terug als de lader beschikbaar is via MQTT of REST fallback."""
+        """Return True if the charger is marked available via MQTT or REST fallback."""
         if self.coordinator.data and "mqtt_charging_state" in self.coordinator.data:
             mqtt_payload = self.coordinator.data["mqtt_charging_state"]
             try:
@@ -72,11 +94,13 @@ class SmappeeAvailabilitySwitch(SmappeeBaseEntity, SwitchEntity):
         data = self.smart_device_data
         if not data:
             return False
-        return data.get("available", False)
+        return bool(data.get("available", False))
 
-    async def async_turn_on(self, **kwargs) -> None:
-        """Stel de lader in als beschikbaar (setAvailable)."""
-        _LOGGER.debug("Laadpaal %s handmatig ingeschakeld (beschikbaar gemaakt)", self.device_id)
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Set the charger status to available."""
+        _LOGGER.debug(
+            "Manually enabling charging station %s (marking available)", self.device_id
+        )
 
         success = await self.client.set_charger_availability(self.device_id, True)
         if success:
@@ -90,9 +114,12 @@ class SmappeeAvailabilitySwitch(SmappeeBaseEntity, SwitchEntity):
             await asyncio.sleep(1.5)
             await self.coordinator.async_request_refresh()
 
-    async def async_turn_off(self, **kwargs) -> None:
-        """Stel de lader in als onbeschikbaar (setUnavailable)."""
-        _LOGGER.debug("Laadpaal %s handmatig uitgeschakeld (onbeschikbaar gemaakt)", self.device_id)
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Set the charger status to unavailable."""
+        _LOGGER.debug(
+            "Manually disabling charging station %s (marking unavailable)",
+            self.device_id,
+        )
 
         success = await self.client.set_charger_availability(self.device_id, False)
         if success:
@@ -107,80 +134,108 @@ class SmappeeAvailabilitySwitch(SmappeeBaseEntity, SwitchEntity):
             await self.coordinator.async_request_refresh()
 
     @property
-    def icon(self):
+    def icon(self) -> str:
+        """Return the icon based on the active availability state."""
         return "mdi:ev-station" if self.is_on else "mdi:ev-station-disabled"
 
 
 class SmappeeOfflineChargingSwitch(SmappeeBaseEntity, SwitchEntity):
-    """Schakelaar om offline laden / failsafe modus te beheren via v11 data."""
+    """Manage offline charging / failsafe modes via v11 database schemas."""
 
     _attr_translation_key = "offline_charging"
     _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, coordinator, client, entry_title, device_id):
-        super().__init__(coordinator, client, entry_title, device_id=device_id, device_type="charger", platform_domain="switch")
+    def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
+        """Initialize the Smappee offline charging switch."""
+        super().__init__(
+            coordinator,
+            client,
+            entry_title,
+            device_id=device_id,
+            device_type="charger",
+            platform_domain="switch",
+        )
 
     @property
-    def unique_id(self):
+    def unique_id(self) -> str:
+        """Return a unique ID for this switch entity."""
         return f"{self.device_id}_offline_charging_switch"
 
     @property
     def is_on(self) -> bool:
-        """Lees de status rechtstreeks uit de nieuwe v11 charging_station_details database."""
-        if self.coordinator.data and "charging_station_details" in self.coordinator.data:
+        """Return the current offline charging status parsed from v11 details or v10 fallbacks."""
+        if (
+            self.coordinator.data
+            and "charging_station_details" in self.coordinator.data
+        ):
             serial = getattr(self.client, "charging_station_serial", None)
-            station_data = self.coordinator.data["charging_station_details"].get(serial) if serial else None
+            station_data = (
+                self.coordinator.data["charging_station_details"].get(str(serial))
+                if serial
+                else None
+            )
 
             if station_data and "offlineCharging" in station_data:
-                # Directe koppeling: True is True, False is False!
                 return bool(station_data["offlineCharging"].get("enabled", False))
 
-        # Betrouwbare Fallback: oude v10 loadManagement methode
         data = self.smart_device_data
         if data:
             return bool(data.get("loadManagement", {}).get("active", False))
 
         return False
 
-    async def _send_payload(self, enabled: bool):
-        """Helper om de status 1-op-1 naar de Smappee v11 API te pushen."""
+    async def _send_payload(self, enabled: bool) -> None:
+        """Transmit the updated load management state alongside the active failsafe limits."""
         serial = getattr(self.client, "charging_station_serial", None)
-        current_failsafe = 3  # Veilige basis default (zoals gezien in je JSON)
+        current_failsafe = 3  # Set safe baseline constraint fallback
 
-        # Probeer de actuele failsafe stroom dynamisch uit de data te vissen
-        if self.coordinator.data and "charging_station_details" in self.coordinator.data and serial:
-            station_data = self.coordinator.data["charging_station_details"].get(serial)
+        if (
+            self.coordinator.data
+            and "charging_station_details" in self.coordinator.data
+            and serial
+        ):
+            station_data = self.coordinator.data["charging_station_details"].get(
+                str(serial)
+            )
             if station_data and "offlineCharging" in station_data:
-                current_failsafe = int(station_data["offlineCharging"].get("failSafe", 3))
+                current_failsafe = int(
+                    station_data["offlineCharging"].get("failSafe", 3)
+                )
         else:
-            # Fallback op de v10 configuratie eigenschappen
             data = self.smart_device_data
             if data:
                 config_props = data.get("configurationProperties", [])
                 for prop in config_props:
                     spec = prop.get("spec", {}) if "spec" in prop else prop
-                    if spec.get("name") == "etc.smart.device.type.car.charger.config.max.gridassistanceamps":
+                    if (
+                        spec.get("name")
+                        == "etc.smart.device.type.car.charger.config.max.gridassistanceamps"
+                    ):
                         values = prop.get("values", [{}])
                         if values:
                             current_failsafe = int(values[0].get("Integer", 3))
 
-        _LOGGER.debug("Load Management switch gewijzigd naar %s. Sturen naar v11 API met failsafe %s A", enabled, current_failsafe)
+        _LOGGER.debug(
+            "Changing load management state to %s. Dispatching to v11 API with failsafe limit %s A",
+            enabled,
+            current_failsafe,
+        )
 
-        # De geteste v11 PATCH call via de client
-        success = await self.client.set_offline_charging_config(enabled, current_failsafe)
+        success = await self.client.set_offline_charging_config(
+            enabled, current_failsafe
+        )
 
         if success and self.coordinator.data:
-            # Multi-layer Optimistic UI update zodat beide datastructuren direct synchroon lopen
-
-            # 1. Update in de rijke v11 station details structuur
+            # Sync local caches with multi-layer optimistic updates to keep UI synchronized
             if serial and "charging_station_details" in self.coordinator.data:
-                station_data = self.coordinator.data["charging_station_details"].get(serial)
+                station_data = self.coordinator.data["charging_station_details"].get(
+                    str(serial)
+                )
                 if station_data:
                     if "offlineCharging" not in station_data:
                         station_data["offlineCharging"] = {}
                     station_data["offlineCharging"]["enabled"] = enabled
 
-            # 2. Update in de klassieke v10 smart_devices lijst
             if "smart_devices" in self.coordinator.data:
                 for device in self.coordinator.data["smart_devices"]:
                     if device.get("id") == self.device_id:
@@ -194,14 +249,15 @@ class SmappeeOfflineChargingSwitch(SmappeeBaseEntity, SwitchEntity):
             await asyncio.sleep(1.5)
             await self.coordinator.async_request_refresh()
 
-    async def async_turn_on(self, **kwargs) -> None:
-        """Zet load management AAN (enabled=True)."""
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable offline charging load management."""
         await self._send_payload(True)
 
-    async def async_turn_off(self, **kwargs) -> None:
-        """Zet load management UIT (enabled=False)."""
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable offline charging load management."""
         await self._send_payload(False)
 
     @property
-    def icon(self):
+    def icon(self) -> str:
+        """Return the connectivity icon matching the online/offline switch state."""
         return "mdi:cloud-outline" if self.is_on else "mdi:cloud-off-outline"

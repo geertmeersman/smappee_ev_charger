@@ -1,3 +1,5 @@
+"""Set up and manage Smappee Charger device tracker entities."""
+
 import logging
 
 from homeassistant.components.device_tracker import SourceType, TrackerEntity
@@ -10,10 +12,11 @@ from .sensor import SmappeeBaseEntity
 
 _LOGGER = logging.getLogger(__name__)
 
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Stel de Smappee device tracker entiteiten dynamisch in."""
+    """Set up Smappee device tracker entities dynamically based on discovered devices."""
     entry_data = hass.data[DOMAIN][entry.entry_id]
     client = entry_data["client"]
     coordinator = entry_data["coordinator"]
@@ -25,11 +28,16 @@ async def async_setup_entry(
             category = device.get("type", {}).get("category")
             device_id = device.get("id")
 
-            # Maak de tracker specifiek aan voor de CARCHARGER
+            # Create location tracking entity exclusively for CARCHARGER devices
             if category == "CARCHARGER" and device_id:
-                _LOGGER.debug("Dynamische device tracker aanmaken voor Smappee lader: %s", device_id)
+                _LOGGER.debug(
+                    "Dynamically creating device tracker entity for Smappee charger: %s",
+                    device_id,
+                )
                 entities.append(
-                    SmappeeChargerLocationTracker(coordinator, client, entry.title, device_id)
+                    SmappeeChargerLocationTracker(
+                        coordinator, client, entry.title, device_id
+                    )
                 )
 
     if entities:
@@ -37,28 +45,36 @@ async def async_setup_entry(
 
 
 class SmappeeChargerLocationTracker(SmappeeBaseEntity, TrackerEntity):
-    """Device tracker die de vaste geografische locatie van het laadstation weergeeft."""
+    """Track the static geographical location coordinates of the charging station."""
 
     _attr_translation_key = "charger_location_tracker"
 
-    def __init__(self, coordinator, client, entry_title, device_id):
-        super().__init__(coordinator, client, entry_title, device_id=device_id, device_type="charger", platform_domain="device_tracker")
+    def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
+        """Initialize the Smappee charger location tracker entity."""
+        super().__init__(
+            coordinator,
+            client,
+            entry_title,
+            device_id=device_id,
+            device_type="charger",
+            platform_domain="device_tracker",
+        )
 
     @property
-    def unique_id(self):
+    def unique_id(self) -> str:
+        """Return a unique ID for this device tracker entity."""
         return f"{self.device_id}_location_tracker"
 
     @property
     def source_type(self) -> SourceType:
-        """Geef aan dat dit een vaste GPS-locatie betreft."""
+        """Return the source type flagging static GPS tracking coordinates."""
         return SourceType.GPS
 
     @property
     def latitude(self) -> float | None:
-        """Haal de breedtegraad dynamic uit de servicelocation data."""
+        """Extract the latitude coordinate dynamically from service location metadata registries."""
         if self.coordinator.data and "servicelocations" in self.coordinator.data:
             for loc in self.coordinator.data["servicelocations"]:
-                # Zoek naar de locatie die de GPS coördinaten bevat
                 lat = loc.get("latitude")
                 if lat is not None:
                     return float(lat)
@@ -66,7 +82,7 @@ class SmappeeChargerLocationTracker(SmappeeBaseEntity, TrackerEntity):
 
     @property
     def longitude(self) -> float | None:
-        """Haal de lengtegraad dynamic uit de servicelocation data."""
+        """Extract the longitude coordinate dynamically from service location metadata registries."""
         if self.coordinator.data and "servicelocations" in self.coordinator.data:
             for loc in self.coordinator.data["servicelocations"]:
                 lon = loc.get("longitude")
@@ -75,5 +91,6 @@ class SmappeeChargerLocationTracker(SmappeeBaseEntity, TrackerEntity):
         return None
 
     @property
-    def icon(self):
+    def icon(self) -> str:
+        """Return the geographical map positioning boundary indicator icon symbol."""
         return "mdi:map-marker-radius"

@@ -1,6 +1,10 @@
+"""Set up and manage Smappee Charger sensor entities."""
+
+from contextlib import suppress
+from datetime import datetime, timezone
 import json
 import logging
-from datetime import datetime, timezone
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -24,10 +28,11 @@ from .const import DOMAIN, MANUFACTURER
 
 _LOGGER = logging.getLogger(__name__)
 
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Stel de Smappee sensor entiteiten dynamisch in op basis van ontdekte apparaten."""
+    """Set up Smappee sensor entities dynamically based on discovered devices."""
     entry_data = hass.data[DOMAIN][entry.entry_id]
     client = entry_data["client"]
     coordinator = entry_data["coordinator"]
@@ -42,27 +47,53 @@ async def async_setup_entry(
             device_id = device.get("id")
 
             if category == "CARCHARGER" and device_id:
-                _LOGGER.debug("Dynamisch sensoren aanmaken voor Smappee lader: %s", device_id)
+                _LOGGER.debug(
+                    "Dynamically creating sensor entities for Smappee charger: %s",
+                    device_id,
+                )
 
-                entities.extend([
-                    SmappeeStatusSensor(coordinator, client, entry.title, device_id),
-                    SmappeeLivePowerSensor(coordinator, client, entry.title, device_id),
-                    SmappeeMaxCurrentLimitSensor(coordinator, client, entry.title, device_id),
-                    SmappeeSessionDurationSensor(coordinator, client, entry.title, device_id),
-                    SmappeeSessionEnergySensor(coordinator, client, entry.title, device_id),
-                    SmappeeSessionRfidSensor(coordinator, client, entry.title, device_id),
-                ])
+                entities.extend(
+                    [
+                        SmappeeStatusSensor(
+                            coordinator, client, entry.title, device_id
+                        ),
+                        SmappeeLivePowerSensor(
+                            coordinator, client, entry.title, device_id
+                        ),
+                        SmappeeMaxCurrentLimitSensor(
+                            coordinator, client, entry.title, device_id
+                        ),
+                        SmappeeSessionDurationSensor(
+                            coordinator, client, entry.title, device_id
+                        ),
+                        SmappeeSessionEnergySensor(
+                            coordinator, client, entry.title, device_id
+                        ),
+                        SmappeeSessionRfidSensor(
+                            coordinator, client, entry.title, device_id
+                        ),
+                    ]
+                )
 
     if entities:
         async_add_entities(entities)
 
 
 class SmappeeBaseEntity(CoordinatorEntity):
-    """Algemene basisklasse voor alle Smappee entiteiten met Device-koppeling."""
+    """Provide a common base entity class for all Smappee device-linked tracking entities."""
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, client, entry_title, device_id, device_type="charger", platform_domain="sensor"):
+    def __init__(
+        self,
+        coordinator,
+        client,
+        entry_title,
+        device_id: str,
+        device_type: str = "charger",
+        platform_domain: str = "sensor",
+    ) -> None:
+        """Initialize the Smappee base entity."""
         super().__init__(coordinator)
         self.client = client
         self.entry_title = entry_title
@@ -75,12 +106,16 @@ class SmappeeBaseEntity(CoordinatorEntity):
         if key:
             self.entity_id = f"{platform_domain}.{DOMAIN}_{device_key}_{key}"
         else:
-            fallback_key = self.__class__.__name__.replace(MANUFACTURER, "").replace("Sensor", "").lower()
+            fallback_key = (
+                self.__class__.__name__.replace(MANUFACTURER, "")
+                .replace("Sensor", "")
+                .lower()
+            )
             self.entity_id = f"{platform_domain}.{DOMAIN}_{device_key}_{fallback_key}"
 
     @property
-    def smart_device_data(self):
-        """Helper om exact de juiste module uit de platte coordinator masterlijst te vissen."""
+    def smart_device_data(self) -> dict[str, Any]:
+        """Fetch the specific device segment directly out of the flat master list."""
         if not self.coordinator.data or "smart_devices" not in self.coordinator.data:
             return {}
 
@@ -92,20 +127,23 @@ class SmappeeBaseEntity(CoordinatorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Koppel de entiteit aan het juiste apparaat (Lader of LED) met correcte naamgeving."""
+        """Link the entity tracking instance back to its corresponding physical device."""
         data = self.smart_device_data
         category = data.get("type", {}).get("category", "UNKNOWN")
-
         child_location_id = data.get("serviceLocation")
 
         parent_location_id = None
         if self.coordinator.data and "servicelocations" in self.coordinator.data:
             locs = self.coordinator.data["servicelocations"]
-            current_loc = next((loc for loc in locs if loc.get("id") == child_location_id), None)
+            current_loc = next(
+                (loc for loc in locs if loc.get("id") == child_location_id), None
+            )
             if current_loc:
                 parent_location_id = current_loc.get("parentId")
 
-        parent_identifier = (DOMAIN, f"location_{parent_location_id}") if parent_location_id else None
+        parent_identifier = (
+            (DOMAIN, f"location_{parent_location_id}") if parent_location_id else None
+        )
 
         if category == "LED":
             display_name = data.get("type", {}).get("displayName", "EV Base LED")
@@ -120,38 +158,48 @@ class SmappeeBaseEntity(CoordinatorEntity):
                 via_device=parent_identifier if parent_identifier else None,
             )
 
-        else:
-            station_serial = data.get("stationSerialNumber") or data.get("serialNumber") or self.client.charging_station_serial or "unknown_charger"
-            model_name = data.get("model", "WALL_QUANTUM_CABLE")
+        station_serial = (
+            data.get("stationSerialNumber")
+            or data.get("serialNumber")
+            or getattr(self.client, "charging_station_serial", None)
+            or "unknown_charger"
+        )
+        model_name = data.get("model", "WALL_QUANTUM_CABLE")
 
-            device_name = "Smappee laadstation - EV Wall"
-            if self.coordinator.data and "smart_devices" in self.coordinator.data:
-                smart_devices = self.coordinator.data["smart_devices"]
-                charging_station_data = next(
-                    (d for d in smart_devices if d.get("type", {}).get("category") == "CHARGINGSTATION"),
-                    None
-                )
-                if charging_station_data:
-                    display_name = charging_station_data.get("type", {}).get("displayName", "Smappee laadstation")
-                    custom_name = charging_station_data.get("name", "EV Wall")
-                    device_name = f"{display_name} - {custom_name}"
-
-            return DeviceInfo(
-                identifiers={(DOMAIN, station_serial)},
-                name=device_name,
-                manufacturer="Smappee",
-                model=model_name.replace("_", " ").title(),
-                sw_version=self.device_id,
-                via_device=parent_identifier if parent_identifier else None,
+        device_name = "Smappee laadstation - EV Wall"
+        if self.coordinator.data and "smart_devices" in self.coordinator.data:
+            smart_devices = self.coordinator.data["smart_devices"]
+            charging_station_data = next(
+                (
+                    d
+                    for d in smart_devices
+                    if d.get("type", {}).get("category") == "CHARGINGSTATION"
+                ),
+                None,
             )
+            if charging_station_data:
+                display_name = charging_station_data.get("type", {}).get(
+                    "displayName", "Smappee laadstation"
+                )
+                custom_name = charging_station_data.get("name", "EV Wall")
+                device_name = f"{display_name} - {custom_name}"
+
+        return DeviceInfo(
+            identifiers={(DOMAIN, station_serial)},
+            name=device_name,
+            manufacturer="Smappee",
+            model=model_name.replace("_", " ").title(),
+            sw_version=self.device_id,
+            via_device=parent_identifier if parent_identifier else None,
+        )
 
 
 class SmappeeBaseSessionSensor(SmappeeBaseEntity, SensorEntity):
-    """Basisklasse voor sensoren die data uit de laadsessies (v10) halen."""
+    """Provide a common blueprint for entities reading active session arrays."""
 
     @property
-    def active_session_data(self):
-        """Haal de meest recente laadsessie op uit het v10 endpoint."""
+    def active_session_data(self) -> dict[str, Any]:
+        """Extract the most recent chronological session map from the data coordinator."""
         if not self.coordinator.data or "recent_sessions" not in self.coordinator.data:
             return {}
 
@@ -162,31 +210,39 @@ class SmappeeBaseSessionSensor(SmappeeBaseEntity, SensorEntity):
 
 
 class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
-    """Sensor die de actuele status van het laadstation weergeeft via MQTT of Rijke REST."""
+    """Track the functional hardware state of the charging node."""
 
     _attr_translation_key = "charger_status"
 
-    def __init__(self, coordinator, client, entry_title, device_id):
-        super().__init__(coordinator, client, entry_title, device_id=device_id, device_type="charger", platform_domain="sensor")
+    def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
+        """Initialize the Smappee status sensor."""
+        super().__init__(
+            coordinator,
+            client,
+            entry_title,
+            device_id=device_id,
+            device_type="charger",
+            platform_domain="sensor",
+        )
 
     @property
-    def unique_id(self):
+    def unique_id(self) -> str:
+        """Return a unique ID for this entity."""
         return f"{self.device_id}_charger_status"
 
     @property
-    def native_value(self):
-        # 1. Prioriteit: Live status vanuit Smappee Cloud MQTT (WebSocket - Real-time)
+    def native_value(self) -> str:
+        """Determine the current active station operational status string."""
+        # 1. Primary: Evaluate real-time push data from Smappee Cloud MQTT WebSocket streams
         if self.coordinator.data and "mqtt_charging_state" in self.coordinator.data:
             mqtt_payload = self.coordinator.data["mqtt_charging_state"]
             try:
                 mqtt_json = json.loads(mqtt_payload)
                 if isinstance(mqtt_json, dict):
-                    # Check A: Pak de meest gedetailleerde live status (bvb "CHARGING_FINISHED")
                     detailed_status = mqtt_json.get("status", {}).get("current")
                     if detailed_status:
                         return str(detailed_status).upper()
 
-                    # Check B: Fallback binnen MQTT naar de algemene chargingState
                     charging_state = mqtt_json.get("chargingState")
                     if charging_state:
                         return str(charging_state).upper()
@@ -194,25 +250,32 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
                 if len(str(mqtt_payload)) <= 255:
                     return str(mqtt_payload).upper()
 
-        # 2. Secundair: Haal de status uit de nieuwe rijke v11 station details (Perfect bij HA Herstart)
-        if self.coordinator.data and "charging_station_details" in self.coordinator.data:
+        # 2. Secondary: Extract status values from rich v11 cached response blocks
+        if (
+            self.coordinator.data
+            and "charging_station_details" in self.coordinator.data
+        ):
             serial = getattr(self.client, "charging_station_serial", None)
-            station_data = self.coordinator.data["charging_station_details"].get(serial) if serial else None
+            station_data = (
+                self.coordinator.data["charging_station_details"].get(str(serial))
+                if serial
+                else None
+            )
 
             if station_data:
                 for module in station_data.get("modules", []):
                     if "carCharger" in module and module["carCharger"]:
-                        # Pak de diepe status (bvb 'SUSPENDED_EVSE')
-                        rest_detailed = module["carCharger"].get("status", {}).get("current")
+                        rest_detailed = (
+                            module["carCharger"].get("status", {}).get("current")
+                        )
                         if rest_detailed:
                             return str(rest_detailed).upper()
 
-                        # Fallback binnen de module naar connectionStatus ('CONNECTED')
                         rest_conn = module["carCharger"].get("connectionStatus")
                         if rest_conn:
                             return str(rest_conn).upper()
 
-        # 3. Ultieme Fallback: Oude vlakke smart_devices structuur
+        # 3. Fallback: Parse the generic flat v10 smart devices configuration registry
         data = self.smart_device_data
         if data:
             if "chargingState" in data and data.get("chargingState") is not None:
@@ -223,8 +286,8 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
         return "AVAILABLE"
 
     @property
-    def extra_state_attributes(self):
-        """Sla de rest van de rijke MQTT JSON data op als attributen."""
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Store additional contextual live parameters inside state metadata arrays."""
         if self.coordinator.data and "mqtt_charging_state" in self.coordinator.data:
             mqtt_payload = self.coordinator.data["mqtt_charging_state"]
             try:
@@ -244,6 +307,7 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
 
     @property
     def icon(self) -> str:
+        """Return a dynamic icon mapping matching the current parsed charger status."""
         status = self.native_value
         if not status:
             return "mdi:ev-station"
@@ -260,14 +324,18 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
             return "mdi:pause-circle-outline"
         if "FINISHED" in status_upper or "COMPLETED" in status_upper:
             return "mdi:battery-check"
-        if "ERROR" in status_upper or "FAULT" in status_upper or "NOT_AVAILABLE" in status_upper:
+        if (
+            "ERROR" in status_upper
+            or "FAULT" in status_upper
+            or "NOT_AVAILABLE" in status_upper
+        ):
             return "mdi:ev-station-disabled"
 
         return "mdi:ev-station"
 
 
 class SmappeeLivePowerSensor(SmappeeBaseEntity, SensorEntity):
-    """Sensor die het actuele live laadvermogen in Watts weergeeft (MQTT prioritized)."""
+    """Monitor the real-time active power delivery tracking in kilowatts."""
 
     _attr_translation_key = "live_power"
     _attr_device_class = SensorDeviceClass.POWER
@@ -275,31 +343,44 @@ class SmappeeLivePowerSensor(SmappeeBaseEntity, SensorEntity):
     _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
     _attr_suggested_display_precision = 2
 
-    def __init__(self, coordinator, client, entry_title, device_id):
-        super().__init__(coordinator, client, entry_title, device_id=device_id, device_type="charger", platform_domain="sensor")
+    def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
+        """Initialize the Smappee live power sensor."""
+        super().__init__(
+            coordinator,
+            client,
+            entry_title,
+            device_id=device_id,
+            device_type="charger",
+            platform_domain="sensor",
+        )
 
     @property
-    def unique_id(self):
+    def unique_id(self) -> str:
+        """Return a unique ID for this entity."""
         return f"{self.device_id}_live_power"
 
     @property
     def native_value(self) -> float | None:
-        """Bereken het actuele vermogen en converteer naar kW."""
+        """Calculate active phase telemetry power values and convert them to kilowatts."""
         raw_watts = None
 
-        # 1. Prioriteit: Live power op basis van de 3 actieve MQTT fases
+        # 1. Primary: Evaluate cumulative active power values across streaming phase structures
         if self.coordinator.data and "mqtt_power_data" in self.coordinator.data:
             mqtt_data = self.coordinator.data["mqtt_power_data"]
             if isinstance(mqtt_data, dict) and "activePowerData" in mqtt_data:
-                try:
+                with suppress(TypeError, ValueError):
                     raw_watts = float(sum(mqtt_data["activePowerData"]))
-                except (TypeError, ValueError):
-                    pass
 
-        # 2. Secundair: Haal het uit de nieuwe rijke v11 station details mocht MQTT er niet zijn
-        if raw_watts is None and self.coordinator.data and "charging_station_details" in self.coordinator.data:
+        # 2. Secondary: Extract the baseline values from cached module responses if streaming is offline
+        if (
+            raw_watts is None
+            and self.coordinator.data
+            and "charging_station_details" in self.coordinator.data
+        ):
             serial = getattr(self.client, "charging_station_serial", None)
-            station_data = self.coordinator.data["charging_station_details"].get(str(serial))
+            station_data = self.coordinator.data["charging_station_details"].get(
+                str(serial)
+            )
             if station_data:
                 for module in station_data.get("modules", []):
                     if "carCharger" in module and module["carCharger"]:
@@ -308,13 +389,12 @@ class SmappeeLivePowerSensor(SmappeeBaseEntity, SensorEntity):
                             raw_watts = float(live_p)
                             break
 
-        # 3. Ultieme Fallback: Oude vlakke smart_devices structuur
+        # 3. Fallback: Query older flat static entity attribute fields
         if raw_watts is None:
             data = self.smart_device_data
             if data:
                 raw_watts = float(data.get("livePower", 0.0))
 
-        # Als er een waarde is gevonden, reken hem om naar kW en rond af op 2 decimalen
         if raw_watts is not None:
             return round(raw_watts / 1000.0, 2)
 
@@ -322,7 +402,7 @@ class SmappeeLivePowerSensor(SmappeeBaseEntity, SensorEntity):
 
 
 class SmappeeMaxCurrentLimitSensor(SmappeeBaseEntity, SensorEntity):
-    """Sensor die de maximale stroomlimiet in Ampère toont uit de configuratie."""
+    """Read the upper safe hardware phase current boundaries configured on the station."""
 
     _attr_translation_key = "max_current_limit"
     _attr_device_class = SensorDeviceClass.CURRENT
@@ -331,15 +411,25 @@ class SmappeeMaxCurrentLimitSensor(SmappeeBaseEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_suggested_display_precision = 0
 
-    def __init__(self, coordinator, client, entry_title, device_id):
-        super().__init__(coordinator, client, entry_title, device_id=device_id, device_type="charger", platform_domain="sensor")
+    def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
+        """Initialize the Smappee max current limit sensor."""
+        super().__init__(
+            coordinator,
+            client,
+            entry_title,
+            device_id=device_id,
+            device_type="charger",
+            platform_domain="sensor",
+        )
 
     @property
-    def unique_id(self):
+    def unique_id(self) -> str:
+        """Return a unique ID for this entity."""
         return f"{self.device_id}_max_current_limit"
 
     @property
-    def native_value(self):
+    def native_value(self) -> float | None:
+        """Extract the static max target capacity limits from configurations."""
         data = self.smart_device_data
         if not data:
             return None
@@ -347,7 +437,10 @@ class SmappeeMaxCurrentLimitSensor(SmappeeBaseEntity, SensorEntity):
         config_props = data.get("configurationProperties", [])
         for prop in config_props:
             spec = prop.get("spec", {})
-            if spec.get("name") == "etc.smart.device.type.car.charger.config.max.current":
+            if (
+                spec.get("name")
+                == "etc.smart.device.type.car.charger.config.max.current"
+            ):
                 values = prop.get("values", [{}])
                 if values:
                     return values[0].get("Quantity", {}).get("value")
@@ -355,28 +448,38 @@ class SmappeeMaxCurrentLimitSensor(SmappeeBaseEntity, SensorEntity):
 
 
 class SmappeeSessionDurationSensor(SmappeeBaseSessionSensor):
-    """Sensor die de actuele duur van de actieve laadsessie berekent in minuten."""
+    """Calculate the operational running time tracking for ongoing charging sessions."""
 
     _attr_translation_key = "session_duration"
     _attr_native_unit_of_measurement = UnitOfTime.MINUTES
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator, client, entry_title, device_id):
-        super().__init__(coordinator, client, entry_title, device_id=device_id, device_type="charger", platform_domain="sensor")
+    def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
+        """Initialize the Smappee session duration sensor."""
+        super().__init__(
+            coordinator,
+            client,
+            entry_title,
+            device_id=device_id,
+            device_type="charger",
+            platform_domain="sensor",
+        )
 
     @property
-    def unique_id(self):
+    def unique_id(self) -> str:
+        """Return a unique ID for this entity."""
         return f"{self.device_id}_session_duration"
 
     @property
-    def native_value(self):
+    def native_value(self) -> float:
+        """Compute active session timestamps into net minutes elapsed."""
         session = self.active_session_data
         if not session:
-            return 0
+            return 0.0
 
         start_ts = session.get("from")
         if not start_ts:
-            return 0
+            return 0.0
 
         try:
             start_time = datetime.fromtimestamp(start_ts / 1000.0, tz=timezone.utc)
@@ -391,16 +494,21 @@ class SmappeeSessionDurationSensor(SmappeeBaseSessionSensor):
 
             return round(duration.total_seconds() / 60.0, 1)
         except Exception as err:
-            _LOGGER.error("Fout bij berekenen sessieduur voor %s: %s", self.device_id, err)
-            return 0
+            _LOGGER.error(
+                "Failed calculating session tracking boundaries for %s: %s",
+                self.device_id,
+                err,
+            )
+            return 0.0
 
     @property
-    def icon(self):
+    def icon(self) -> str:
+        """Return the clock icon placeholder for timeline elements."""
         return "mdi:clock-outline"
 
 
 class SmappeeSessionEnergySensor(SmappeeBaseSessionSensor):
-    """Sensor die de geladen energie toont, met alle overige API-sessiedata dynamisch als attributen."""
+    """Track overall continuous power accumulation consumed during charging loops."""
 
     _attr_translation_key = "session_energy"
     _attr_device_class = SensorDeviceClass.ENERGY
@@ -408,29 +516,37 @@ class SmappeeSessionEnergySensor(SmappeeBaseSessionSensor):
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_suggested_display_precision = 2
 
-    def __init__(self, coordinator, client, entry_title, device_id):
-        super().__init__(coordinator, client, entry_title, device_id=device_id, device_type="charger", platform_domain="sensor")
+    def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
+        """Initialize the Smappee session energy sensor."""
+        super().__init__(
+            coordinator,
+            client,
+            entry_title,
+            device_id=device_id,
+            device_type="charger",
+            platform_domain="sensor",
+        )
 
     @property
-    def unique_id(self):
+    def unique_id(self) -> str:
+        """Return a unique ID for this entity."""
         return f"{self.device_id}_session_energy"
 
     @property
     def native_value(self) -> float:
-        """Haal de geladen energie op."""
+        """Retrieve the aggregate electrical charge consumption total."""
         energy = self.active_session_data.get("energy", 0.0)
         return round(float(energy), 2)
 
     @property
-    def extra_state_attributes(self) -> dict[str, any] | None:
-        """Neem een kopie van de volledige sessie JSON en filter de ballast eruit."""
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Extract historical context values dynamically out of active session footprints."""
         if not self.active_session_data:
             return None
 
-        # Maak een veilige kopie van de dictionary om de coordinator-data intact te laten
         attributes = dict(self.active_session_data)
 
-        # Snijd de hoofdwaarde en de statische/zware infrastructuur-objecten eruit
+        # Remove primary sensor statistics and bulky infrastructure nesting parameters
         attributes.pop("energy", None)
         attributes.pop("controller", None)
         attributes.pop("station", None)
@@ -439,22 +555,34 @@ class SmappeeSessionEnergySensor(SmappeeBaseSessionSensor):
 
         return attributes
 
+
 class SmappeeSessionRfidSensor(SmappeeBaseSessionSensor):
-    """Sensor die het RFID-kaartnummer (Token) toont waarmee de sessie is gestart."""
+    """Track the identifier token credentials matching authenticated authorizations."""
 
     _attr_translation_key = "session_rfid"
 
-    def __init__(self, coordinator, client, entry_title, device_id):
-        super().__init__(coordinator, client, entry_title, device_id=device_id, device_type="charger", platform_domain="sensor")
+    def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
+        """Initialize the Smappee session RFID sensor."""
+        super().__init__(
+            coordinator,
+            client,
+            entry_title,
+            device_id=device_id,
+            device_type="charger",
+            platform_domain="sensor",
+        )
 
     @property
-    def unique_id(self):
+    def unique_id(self) -> str:
+        """Return a unique ID for this entity."""
         return f"{self.device_id}_session_rfid"
 
     @property
-    def native_value(self):
+    def native_value(self) -> Any:
+        """Return the signature key identification assigned to transactions."""
         return self.active_session_data.get("rfid")
 
     @property
-    def icon(self):
+    def icon(self) -> str:
+        """Return an active smart badge card identification graphic icon."""
         return "mdi:card-account-details"
