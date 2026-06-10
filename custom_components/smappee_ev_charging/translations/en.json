@@ -1,0 +1,147 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Smappee Cloud",
+        "description": "Enter your Smappee dashboard credentials.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "select_station": {
+        "title": "Select your charging station",
+        "description": "Choose the charging station you want to add to Home Assistant.",
+        "data": {
+          "station_id": "Charging Station"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to Smappee. Please check your logs or credentials.",
+      "no_charging_stations_found": "Successfully logged in, but no locations with type 'CHARGINGSTATION' were found."
+    }
+  },
+  
+  "entity": {
+    "device_tracker": {
+      "charger_location_tracker": {
+        "name": "Charger location"
+      }
+    },
+    "binary_sensor": {
+      "network_status": {
+        "name": "Network status"
+      },
+      "car_connected": {
+        "name": "Car connected"
+      }
+    },
+    "sensor": {
+      "charging_mode": {
+        "name": "Charging mode"
+      },
+      "optimization_strategy": {
+        "name": "Optimization strategy"
+      },
+      "charger_status": {
+        "name": "Charger status",
+        "state": {
+          "AVAILABLE": "Available",
+          "CABLE_CONNECTED": "Cable connected",
+          "CHARGING": "Charging",
+          "SUSPENDED_EVSE": "Paused by charger",
+          "CHARGING_FINISHED": "Charging finished",
+          "ERROR": "Error"
+        }
+      },
+      "max_current_limit": {
+        "name": "Max current limit"
+      },
+      "session_energy": {
+        "name": "Session energy"
+      },
+      "session_status": {
+        "name": "Session status"
+      },
+      "session_rfid": {
+        "name": "Session RFID"
+      },
+      "session_duration": {
+        "name": "Session duration"
+      },
+      "live_power": {
+        "name": "Live power"
+      },
+      "phase_configuration": {
+        "name": "Phase configuration"
+      },
+      "led_brightness": {
+        "name": "LED brightness"
+      }
+    },
+    "number": {
+      "max_current_setting": {
+        "name": "Max current setting"
+      },
+      "led_brightness_setting": {
+        "name": "LED brightness setting"
+      },
+      "grid_assistance_setting": {
+        "name": "Grid assistance setting"
+      },
+      "offline_failsafe_setting": {
+        "name": "Offline failsafe setting"
+      },
+      "charge_percentage_limit": {
+        "name": "Charging power limit"
+      },
+      "min_excess_percentage": {
+        "name": "Minimum solar excess"
+      }
+    },
+    "select": {
+      "charging_mode_select": {
+        "name": "Charging mode",
+        "state": {
+          "STANDARD": "Standard (Fast)",
+          "SMART": "Smart charging",
+          "SOLAR": "Solar surplus"
+        }
+      },
+      "phase_config_select": {
+        "name": "Phase configuration",
+        "state": {
+          "L1-L2-L3": "L1 - L2 - L3 (Standard)",
+          "L1-L3-L2": "L1 - L3 - L2",
+          "L2-L1-L3": "L2 - L1 - L3",
+          "L2-L3-L1": "L2 - L3 - L1",
+          "L3-L1-L2": "L3 - L1 - L2",
+          "L3-L2-L1": "L3 - L2 - L1"
+        }
+      }
+    },
+    "switch": {
+      "charger_availability": {
+        "name": "Charger availability"
+      },
+      "offline_charging": {
+        "name": "Offline charging"
+      }
+    },
+    "button": {
+      "stop_charging_button": {
+        "name": "Stop charging session"
+      },
+      "pause_charging_button": {
+        "name": "Pause charging session"
+      },
+      "normal_charging_mode_button": {
+        "name": "Activate standard charging"
+      },
+      "smart_charging_mode_button": {
+        "name": "Activate smart charging"
+      }
+    }
+  }
+}
