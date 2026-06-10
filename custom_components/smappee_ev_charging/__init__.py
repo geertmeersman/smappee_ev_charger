@@ -1,15 +1,16 @@
 """The Smappee Charger integration."""
-import logging
 import json
+import logging
 from datetime import timedelta
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, STARTUP
 from .client import SmappeeClient
+from .const import DOMAIN, STARTUP
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # 1. Initialize the API client
     session = async_get_clientsession(hass)
     client = SmappeeClient(username, password, session)
-    
+
     # Ensure the charging station serial number is directly available on the client
     client.charging_station_serial = entry.data.get("serial")
 
@@ -35,7 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             # Fetch ALL service locations
             servicelocations = await client.get_service_locations_full_details()
-            
+
             all_smart_devices = []
             charging_station_details = {}
 
@@ -43,7 +44,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             for loc in servicelocations:
                 # Dive directly into the nested chargingStation object
                 charging_station_obj = loc.get("chargingStation")
-                
+
                 # Check if the object exists and contains a serial number
                 if charging_station_obj and isinstance(charging_station_obj, dict):
                     raw_serial = charging_station_obj.get("serialNumber")
@@ -53,26 +54,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 # ONLY fetch details if a valid serial number is found
                 if raw_serial is not None:
                     serial_str = str(raw_serial).strip()
-                    
+
                     _LOGGER.debug("Valid charging station serial discovered: %s. Fetching details...", serial_str)
-                    
+
                     # Sync the correct serial number to the client
                     client.charging_station_serial = serial_str
-                    
+
                     # Fetch details via the correct charging station serial
                     station_data = await client.get_charging_station_details(serial_str)
                     if station_data:
                         charging_station_details[serial_str] = station_data
-                        
+
                         # Extract the linked smart_devices directly from the modules
                         modules = station_data.get("modules", [])
                         for module in modules:
                             if "smartDevice" in module:
                                 smart_device = module["smartDevice"]
-                                
+
                                 if "configurationProperties" in module:
                                     smart_device["configurationProperties"] = module["configurationProperties"]
-                                
+
                                 if smart_device not in all_smart_devices:
                                     all_smart_devices.append(smart_device)
 
@@ -80,14 +81,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if not all_smart_devices and servicelocations:
                 _LOGGER.debug("No devices found via modules, falling back to get_smart_devices")
                 client.service_location_id = servicelocations[0].get("id")
-                
+
                 fallback_devices = await client.get_smart_devices()
                 for d in fallback_devices:
                     if d not in all_smart_devices:
                         all_smart_devices.append(d)
 
             recent_sessions = await client.get_recent_sessions()
-            
+
             new_data = {
                 "servicelocations": servicelocations,
                 "smart_devices": all_smart_devices,
@@ -124,7 +125,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             _LOGGER.debug("Executing Smappee API session update...")
             recent_sessions = await client.get_recent_sessions()
-            
+
             if coordinator.data:
                 coordinator.data["recent_sessions"] = recent_sessions
                 coordinator.async_set_updated_data(coordinator.data)
@@ -149,11 +150,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     def handle_charging_session_timers(is_charging: bool):
         """Manage dynamic timers based strictly on the CHARGING status of the vehicle."""
         nonlocal session_interval_unsub, was_charging
-        
+
         # Scenario A: Vehicle enters CHARGING state -> Start the 5-minute loop timer
         if is_charging and not session_interval_unsub:
             _LOGGER.info("Vehicle started charging. Dynamic 5-minute session timer activated.")
-            
+
             async def run_periodic_session_update(_now):
                 await coordinator.async_refresh_sessions_only()
 
@@ -166,18 +167,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Scenario B: Vehicle stopped CHARGING -> Stop loop timer and execute final settlement call after 5s
         elif not is_charging and was_charging:
             _LOGGER.info("Vehicle stopped charging. Stopping periodic timer and scheduling final session update in 5 seconds...")
-            
+
             if session_interval_unsub:
                 session_interval_unsub()
                 session_interval_unsub = None
-            
+
             async def finalize_charging_session(_now):
                 _LOGGER.info("Executing final Smappee session call (5s post-charging).")
                 await coordinator.async_refresh_sessions_only()
 
             from homeassistant.helpers.event import async_call_later
             async_call_later(hass, 5, finalize_charging_session)
-            
+
             was_charging = False
 
     # 2. Execute first baseline refresh via REST API
@@ -260,7 +261,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         mqtt_client = mqtt_paho.Client(transport="websockets")
         mqtt_client.username_pw_set(mqtt_config["username"], mqtt_config["password"])
-        
+
         await hass.async_add_executor_job(mqtt_client.tls_set)
         mqtt_client.reconnect_delay_set(min_delay=1, max_delay=120)
 
@@ -285,7 +286,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             """Callback triggered when an asynchronous message arrives from the cloud thread."""
             payload = msg.payload.decode("utf-8")
             topic = msg.topic
-            
+
             target_charging_topic = str(mqtt_config.get("charging_state_topic", "")).lower()
             target_power_topic = str(mqtt_config.get("power_topic", "")).lower()
             current_topic_lower = str(topic).lower()
@@ -302,18 +303,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         coordinator.data["mqtt_charging_state"] = payload
                         # This triggers async_set_updated_data, which has its own internal log we want to bypass
                         coordinator.async_set_updated_data(coordinator.data)
-                    
+
                     try:
                         mqtt_json = json.loads(payload)
                         if isinstance(mqtt_json, dict):
                             status_obj = mqtt_json.get("status", {})
                             state = str(status_obj.get("current", mqtt_json.get("chargingState", ""))).upper()
-                            
+
                             is_active_charging = (state == "CHARGING")
                             handle_charging_session_timers(is_active_charging)
                     except Exception as e:
                         _LOGGER.error("Error parsing charging state for timer runtime: %s", e)
-                
+
                 elif current_topic_lower == target_power_topic:
                     if coordinator.data:
                         try:
@@ -336,10 +337,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             broker_host = mqtt_config.get("host", "dashboard.smappee.net")
             broker_port = mqtt_config.get("port", 443)
-            
+
             mqtt_client.connect_async(broker_host, broker_port, keepalive=60)
             mqtt_client.loop_start()
-            
+
             def stop_mqtt_loop(_event=None):
                 _LOGGER.info("Permanently closing Smappee Cloud MQTT background loop...")
                 if session_interval_unsub:
@@ -351,7 +352,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.async_on_unload(
                 hass.bus.async_listen_once("homeassistant_stop", stop_mqtt_loop)
             )
-            
+
         except Exception as conn_err:
             _LOGGER.error("Critical error starting Smappee Cloud MQTT link: %s", conn_err)
     else:

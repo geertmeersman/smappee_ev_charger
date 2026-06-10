@@ -1,14 +1,25 @@
-import logging
 import json
+import logging
 from datetime import datetime, timezone
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import (
+    UnitOfElectricCurrent,
+    UnitOfEnergy,
+    UnitOfPower,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.const import UnitOfPower, UnitOfElectricCurrent, UnitOfEnergy, UnitOfTime
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
 from .const import DOMAIN, MANUFACTURER
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,7 +43,7 @@ async def async_setup_entry(
 
             if category == "CARCHARGER" and device_id:
                 _LOGGER.debug("Dynamisch sensoren aanmaken voor Smappee lader: %s", device_id)
-                
+
                 entities.extend([
                     SmappeeStatusSensor(coordinator, client, entry.title, device_id),
                     SmappeeLivePowerSensor(coordinator, client, entry.title, device_id),
@@ -72,7 +83,7 @@ class SmappeeBaseEntity(CoordinatorEntity):
         """Helper om exact de juiste module uit de platte coordinator masterlijst te vissen."""
         if not self.coordinator.data or "smart_devices" not in self.coordinator.data:
             return {}
-        
+
         smart_devices = self.coordinator.data["smart_devices"]
         for device in smart_devices:
             if device.get("id") == self.device_id:
@@ -84,22 +95,22 @@ class SmappeeBaseEntity(CoordinatorEntity):
         """Koppel de entiteit aan het juiste apparaat (Lader of LED) met correcte naamgeving."""
         data = self.smart_device_data
         category = data.get("type", {}).get("category", "UNKNOWN")
-        
+
         child_location_id = data.get("serviceLocation")
-        
+
         parent_location_id = None
         if self.coordinator.data and "servicelocations" in self.coordinator.data:
             locs = self.coordinator.data["servicelocations"]
             current_loc = next((loc for loc in locs if loc.get("id") == child_location_id), None)
             if current_loc:
                 parent_location_id = current_loc.get("parentId")
-        
+
         parent_identifier = (DOMAIN, f"location_{parent_location_id}") if parent_location_id else None
 
         if category == "LED":
             display_name = data.get("type", {}).get("displayName", "EV Base LED")
             custom_name = data.get("name", "EV Wall - LED")
-            
+
             return DeviceInfo(
                 identifiers={(DOMAIN, self.device_id)},
                 name=f"{display_name} - {custom_name}",
@@ -108,16 +119,16 @@ class SmappeeBaseEntity(CoordinatorEntity):
                 sw_version=self.device_id,
                 via_device=parent_identifier if parent_identifier else None,
             )
-            
+
         else:
             station_serial = data.get("stationSerialNumber") or data.get("serialNumber") or self.client.charging_station_serial or "unknown_charger"
             model_name = data.get("model", "WALL_QUANTUM_CABLE")
-            
+
             device_name = "Smappee laadstation - EV Wall"
             if self.coordinator.data and "smart_devices" in self.coordinator.data:
                 smart_devices = self.coordinator.data["smart_devices"]
                 charging_station_data = next(
-                    (d for d in smart_devices if d.get("type", {}).get("category") == "CHARGINGSTATION"), 
+                    (d for d in smart_devices if d.get("type", {}).get("category") == "CHARGINGSTATION"),
                     None
                 )
                 if charging_station_data:
@@ -143,7 +154,7 @@ class SmappeeBaseSessionSensor(SmappeeBaseEntity, SensorEntity):
         """Haal de meest recente laadsessie op uit het v10 endpoint."""
         if not self.coordinator.data or "recent_sessions" not in self.coordinator.data:
             return {}
-        
+
         sessions = self.coordinator.data["recent_sessions"]
         if sessions and isinstance(sessions, list):
             return sessions[0]
@@ -187,7 +198,7 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
         if self.coordinator.data and "charging_station_details" in self.coordinator.data:
             serial = getattr(self.client, "charging_station_serial", None)
             station_data = self.coordinator.data["charging_station_details"].get(serial) if serial else None
-            
+
             if station_data:
                 for module in station_data.get("modules", []):
                     if "carCharger" in module and module["carCharger"]:
@@ -195,7 +206,7 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
                         rest_detailed = module["carCharger"].get("status", {}).get("current")
                         if rest_detailed:
                             return str(rest_detailed).upper()
-                        
+
                         # Fallback binnen de module naar connectionStatus ('CONNECTED')
                         rest_conn = module["carCharger"].get("connectionStatus")
                         if rest_conn:
@@ -332,7 +343,7 @@ class SmappeeMaxCurrentLimitSensor(SmappeeBaseEntity, SensorEntity):
         data = self.smart_device_data
         if not data:
             return None
-        
+
         config_props = data.get("configurationProperties", [])
         for prop in config_props:
             spec = prop.get("spec", {})
@@ -370,14 +381,14 @@ class SmappeeSessionDurationSensor(SmappeeBaseSessionSensor):
         try:
             start_time = datetime.fromtimestamp(start_ts / 1000.0, tz=timezone.utc)
             end_ts = session.get("to")
-            
+
             if end_ts:
                 end_time = datetime.fromtimestamp(end_ts / 1000.0, tz=timezone.utc)
                 duration = end_time - start_time
             else:
                 now = datetime.now(timezone.utc)
                 duration = now - start_time
-                
+
             return round(duration.total_seconds() / 60.0, 1)
         except Exception as err:
             _LOGGER.error("Fout bij berekenen sessieduur voor %s: %s", self.device_id, err)
@@ -418,14 +429,14 @@ class SmappeeSessionEnergySensor(SmappeeBaseSessionSensor):
 
         # Maak een veilige kopie van de dictionary om de coordinator-data intact te laten
         attributes = dict(self.active_session_data)
-        
+
         # Snijd de hoofdwaarde en de statische/zware infrastructuur-objecten eruit
         attributes.pop("energy", None)
         attributes.pop("controller", None)
         attributes.pop("station", None)
         attributes.pop("address", None)
         attributes.pop("updateChannels", None)
-        
+
         return attributes
 
 class SmappeeSessionRfidSensor(SmappeeBaseSessionSensor):

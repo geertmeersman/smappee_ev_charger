@@ -1,13 +1,15 @@
-import logging
 import asyncio
 import json
+import logging
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import EntityCategory
-from .sensor import SmappeeBaseEntity
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
 from .const import DOMAIN
+from .sensor import SmappeeBaseEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,7 +50,7 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
 
     def __init__(self, coordinator, client, entry_title, device_id):
         super().__init__(coordinator, client, entry_title, device_id=device_id, device_type="charger", platform_domain="select")
-        
+
         # De ondersteunde opties uit de Smappee JSON features
         self._attr_options = ["STANDARD", "SMART", "SOLAR"]
 
@@ -59,7 +61,7 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Toon de huidige geselecteerde modus op basis van MQTT of de rijke REST details."""
-        
+
         # 1. Prioriteit: Check de live MQTT JSON data uit de WebSocket (Loepzuiver & Real-time)
         if self.coordinator.data and "mqtt_charging_state" in self.coordinator.data:
             mqtt_payload = self.coordinator.data["mqtt_charging_state"]
@@ -84,7 +86,7 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
             # Dit serienummer staat op de client óf we vissen het uit de base entiteit
             serial = getattr(self.client, "charging_station_serial", None)
             station_data = self.coordinator.data["charging_station_details"].get(serial) if serial else None
-            
+
             if station_data:
                 # Loop door de modules om de carCharger data te vinden
                 for module in station_data.get("modules", []):
@@ -92,7 +94,7 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
                         cc_data = module["carCharger"]
                         charging_mode = str(cc_data.get("chargingMode", "")).upper()
                         optimization_strategy = str(cc_data.get("optimizationStrategy", "")).upper()
-                        
+
                         if charging_mode in ("STANDARD", "NORMAL"):
                             return "STANDARD"
                         if charging_mode == "SMART" and optimization_strategy == "EXCESS_ONLY":
@@ -119,7 +121,7 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Aangeroepen wanneer de gebruiker een modus kiest in de Home Assistant UI."""
         _LOGGER.debug("Laadmodus via HA dropdown voor %s gewijzigd naar: %s", self.device_id, option)
-        
+
         # 1. Haal het serviceLocation ID dynamisch uit het apparaat-object (Geen hardcoded client status!)
         service_location_id = None
         data = self.smart_device_data
@@ -132,7 +134,7 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
 
         # 2. Stuur de geselecteerde modus EN het juiste service_location_id naar de client
         success = await self.client.set_charging_mode(service_location_id, self.device_id, option)
-        
+
         if success:
             # Optimistic update
             if self.coordinator.data:
@@ -158,7 +160,7 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
                                 device["loadManagement"] = {}
                             device["loadManagement"]["optimizationStrategy"] = api_strategy
                             break
-                            
+
                 self.coordinator.async_set_updated_data(self.coordinator.data)
 
             await asyncio.sleep(1.5)
@@ -184,7 +186,7 @@ class SmappeePhaseRotationSelect(SmappeeBaseEntity, SelectEntity):
 
     def __init__(self, coordinator, client, entry_title, device_id):
         super().__init__(coordinator, client, entry_title, device_id=device_id, device_type="charger", platform_domain="select")
-        
+
         # Alle 6 mogelijke permutaties van de 3 fasen als duidelijke UI-opties
         self._attr_options = [
             "L1-L2-L3",  # ABC
@@ -232,20 +234,20 @@ class SmappeePhaseRotationSelect(SmappeeBaseEntity, SelectEntity):
         if "installationConfiguration" in station_data:
             config = station_data["installationConfiguration"].get("currentlyConfigured", {})
             phases_list = config.get("phases", [])
-            
+
             if phases_list and isinstance(phases_list, list) and len(phases_list) > 0:
                 actual_phases = [str(p).strip().upper() for p in phases_list[0]]
-                
+
                 for ha_option, api_array in self._mapping.items():
                     if actual_phases == api_array:
                         return ha_option
-                        
+
         return None
 
     async def async_select_option(self, option: str) -> None:
         """Aangeroepen wanneer de gebruiker een nieuwe rotatie kiest in de UI."""
         _LOGGER.debug("Faserotatie voor lader %s wordt gewijzigd naar: %s", self.device_id, option)
-        
+
         # 1. Haal de doelfasen op via de mapping dictionary
         target_phases = self._mapping.get(option)
         if not target_phases:
@@ -253,7 +255,7 @@ class SmappeePhaseRotationSelect(SmappeeBaseEntity, SelectEntity):
             return
 
         serial = getattr(self.client, "charging_station_serial", None)
-        
+
         # 2. Haal de actuele installatieconfiguratie op uit de coordinator
         station_data = None
         if self.coordinator.data and "charging_station_details" in self.coordinator.data and serial:
@@ -261,14 +263,14 @@ class SmappeePhaseRotationSelect(SmappeeBaseEntity, SelectEntity):
 
         if not station_data or "installationConfiguration" not in station_data:
             _LOGGER.error(
-                "Kan faserotatie voor %s niet aanpassen: actuele installatieconfiguratie ontbreekt in coordinator cache.", 
+                "Kan faserotatie voor %s niet aanpassen: actuele installatieconfiguratie ontbreekt in coordinator cache.",
                 serial
             )
             return
 
         # Pak de op dit moment actieve configuratie-tak
         currently_configured = station_data["installationConfiguration"].get("currentlyConfigured", {})
-        
+
         # 3. Trek de live parameters dynamic los uit de JSON
         amount_cables = currently_configured.get("amountPowerSupplyCables")
         maximum_current = currently_configured.get("maximumCurrent") # Dit is al een array van objecten, e.g. [{"value": 20, "unit": "AMPERE"}]
@@ -292,12 +294,12 @@ class SmappeePhaseRotationSelect(SmappeeBaseEntity, SelectEntity):
 
         # 6. Voer de PUT call uit richting de v11 API
         success = await self.client.set_installation_configuration(payload)
-        
+
         if success:
             # Optimistic UI update in de coordinator data structuren
             currently_configured["phases"] = [target_phases]
             self.coordinator.async_set_updated_data(self.coordinator.data)
-            
+
             await asyncio.sleep(1.5)
             await self.coordinator.async_request_refresh()
 

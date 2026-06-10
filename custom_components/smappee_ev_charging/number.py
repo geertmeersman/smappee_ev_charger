@@ -1,14 +1,15 @@
-import logging
 import asyncio
-from homeassistant.components.number import NumberEntity, NumberDeviceClass, NumberMode
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.const import UnitOfElectricCurrent, PERCENTAGE
-from homeassistant.helpers.entity import EntityCategory
+import logging
 
-from .sensor import SmappeeBaseEntity
+from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import PERCENTAGE, UnitOfElectricCurrent
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
 from .const import DOMAIN
+from .sensor import SmappeeBaseEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ async def async_setup_entry(
                     SmappeeOfflineFailsafeNumber(coordinator, client, entry.title, device_id),
                     SmappeeChargePercentageSlider(coordinator, client, entry.title, device_id),
                 ])
-            
+
             elif category == "LED":
                 _LOGGER.debug("Creating dynamic LED brightness configuration slider for: %s", device_id)
                 entities.append(
@@ -94,7 +95,7 @@ class SmappeeConfigPropertyNumber(SmappeeBaseEntity, NumberEntity):
         self._value_type = value_type
         self._default_min = default_min
         self._default_max = default_max
-        
+
         self._attr_translation_key = translation_key
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = device_class
@@ -147,16 +148,16 @@ class SmappeeConfigPropertyNumber(SmappeeBaseEntity, NumberEntity):
         """Dynamically structure payload configurations and dispatch changes to the backend client."""
         int_value = int(value)
         _LOGGER.info("Updating configuration parameter '%s' to %s", self._property_name, int_value)
-        
+
         value_payload = {"value": int_value} if self._value_type == "Quantity" else int_value
-        
+
         # Use the generic config implementation we established inside client.py earlier
         success = await self.client.update_configuration_property(
             device_id=self.device_id,
             property_name=self._property_name,
             value_dict={self._value_type: value_payload}
         )
-        
+
         if success and self.coordinator.data:
             # Inject optimistic UI update inside local caches
             for device in self.coordinator.data["smart_devices"]:
@@ -209,14 +210,14 @@ class SmappeeOfflineFailsafeNumber(SmappeeBaseEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         serial = getattr(self.client, "charging_station_serial", None)
         is_enabled = True
-        
+
         if self.coordinator.data and "charging_station_details" in self.coordinator.data and serial:
             station_data = self.coordinator.data["charging_station_details"].get(serial)
             if station_data and "offlineCharging" in station_data:
                 is_enabled = bool(station_data["offlineCharging"].get("enabled", True))
 
         success = await self.client.set_offline_charging_config(is_enabled, int(value))
-        
+
         if success and self.coordinator.data:
             if serial and "charging_station_details" in self.coordinator.data:
                 station_data = self.coordinator.data["charging_station_details"].get(serial)
@@ -224,7 +225,7 @@ class SmappeeOfflineFailsafeNumber(SmappeeBaseEntity, NumberEntity):
                     if "offlineCharging" not in station_data:
                         station_data["offlineCharging"] = {}
                     station_data["offlineCharging"]["failSafe"] = int(value)
-            
+
             self.coordinator.async_set_updated_data(self.coordinator.data)
             await asyncio.sleep(1.0)
             await self.coordinator.async_refresh_rendering()
@@ -262,20 +263,20 @@ class SmappeeChargePercentageSlider(SmappeeBaseEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         int_value = int(value)
-        
+
         payload = [
             {
                 "spec": {"name": "percentageLimit", "species": "Integer", "unit": "%", "required": True},
                 "values": [{"Integer": int_value}]
             }
         ]
-        
+
         success = await self.client.execute_device_action(
             device_id=self.device_id,
             action_name="setPercentageLimit",
             payload=payload
         )
-        
+
         if success and self.coordinator.data:
             serial = getattr(self.client, "charging_station_serial", None)
             if serial and "charging_station_details" in self.coordinator.data:
@@ -284,7 +285,7 @@ class SmappeeChargePercentageSlider(SmappeeBaseEntity, NumberEntity):
                     for module in station_data.get("modules", []):
                         if "carCharger" in module and module["carCharger"]:
                             module["carCharger"]["percentageLimit"] = int_value
-            
+
             self.coordinator.async_set_updated_data(self.coordinator.data)
             await asyncio.sleep(1.0)
             await self.coordinator.async_refresh_rendering()

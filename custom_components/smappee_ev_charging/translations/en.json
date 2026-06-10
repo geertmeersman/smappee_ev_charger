@@ -22,7 +22,6 @@
       "no_charging_stations_found": "Successfully logged in, but no locations with type 'CHARGINGSTATION' were found."
     }
   },
-  
   "entity": {
     "device_tracker": {
       "charger_location_tracker": {

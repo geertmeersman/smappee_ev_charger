@@ -1,11 +1,13 @@
-import logging
 import asyncio
+import logging
+
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from .sensor import SmappeeBaseEntity
+
 from .const import DOMAIN
+from .sensor import SmappeeBaseEntity
 
 _LOGGER = logging.getLogger(__name__)
 

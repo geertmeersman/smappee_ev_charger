@@ -1,11 +1,13 @@
-import logging
 import asyncio
-from homeassistant.components.light import LightEntity, ColorMode, ATTR_BRIGHTNESS
+import logging
+
+from homeassistant.components.light import ATTR_BRIGHTNESS, ColorMode, LightEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from .sensor import SmappeeBaseEntity
+
 from .const import DOMAIN
+from .sensor import SmappeeBaseEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,7 +43,7 @@ class SmappeeLedLight(SmappeeBaseEntity, LightEntity):
     """Dimbare lamp entiteit voor de Smappee EV Wall LED-ring."""
 
     _attr_translation_key = "led_light"
-    
+
     # We configureren de lamp als een dimbare lamp (helderheid control)
     _attr_color_mode = ColorMode.BRIGHTNESS
     _attr_supported_color_modes = {ColorMode.BRIGHTNESS}
@@ -94,10 +96,10 @@ class SmappeeLedLight(SmappeeBaseEntity, LightEntity):
         target_percentage = max(1, min(100, target_percentage))
 
         _LOGGER.debug("Smappee LED %s inschakelen op %s%%", self.device_id, target_percentage)
-        
+
         # HAAL DE LIJST MET APPARATEN OP UIT DE COORDINATOR
         smart_devices = self.coordinator.data.get("smart_devices", []) if self.coordinator.data else []
-        
+
         # PAS DE AANROEP AAN: Geef nu netjes alle 3 de argumenten mee!
         success = await self.client.set_led_brightness(smart_devices, self.device_id, target_percentage)
         if success:
@@ -108,10 +110,10 @@ class SmappeeLedLight(SmappeeBaseEntity, LightEntity):
     async def async_turn_off(self, **kwargs) -> None:
         """Zet de lamp uit (helderheid naar 0%)."""
         _LOGGER.debug("Smappee LED %s uitschakelen (0%%)", self.device_id)
-        
+
         # HAAL DE LIJST MET APPARATEN OP UIT DE COORDINATOR
         smart_devices = self.coordinator.data.get("smart_devices", []) if self.coordinator.data else []
-        
+
         # PAS DE AANROEP AAN: Geef ook hier de 3 vereiste argumenten mee!
         success = await self.client.set_led_brightness(smart_devices, self.device_id, 0)
         if success:

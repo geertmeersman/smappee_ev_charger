@@ -1,13 +1,17 @@
-import logging
 import json
-from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
+import logging
+
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .sensor import SmappeeBaseEntity
 from .const import DOMAIN
+from .sensor import SmappeeBaseEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,7 +35,7 @@ async def async_setup_entry(
             # Maak binary sensoren aan per ontdekte CARCHARGER lader
             if category == "CARCHARGER" and device_id:
                 _LOGGER.debug("Dynamisch binaire sensoren aanmaken voor Smappee lader: %s", device_id)
-                
+
                 entities.extend([
                     SmappeeNetworkStatusBinarySensor(coordinator, client, entry.title, device_id),
                     SmappeeCarConnectedBinarySensor(coordinator, client, entry.title, device_id),
@@ -58,7 +62,7 @@ class SmappeeNetworkStatusBinarySensor(SmappeeBaseEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         """Geef True terug als de lader volgens de API online/active is."""
-        
+
         # 1. Check eerst de rijke details van de laadpaal (hier zit de harde waarheid)
         if self.coordinator.data and "charging_station_details" in self.coordinator.data:
             serial = getattr(self.client, "charging_station_serial", None)
@@ -71,7 +75,7 @@ class SmappeeNetworkStatusBinarySensor(SmappeeBaseEntity, BinarySensorEntity):
         data = self.smart_device_data
         if not data:
             return False
-        
+
         return data.get("available", False)
 
 
@@ -91,7 +95,7 @@ class SmappeeCarConnectedBinarySensor(SmappeeBaseEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         """Controleer real-time via MQTT of via de cloud fallback of de auto ingeplugd is."""
-        
+
         # 1. PRIORITEIT: Live MQTT JSON status uit de WebSocket (Real-time)
         if self.coordinator.data and "mqtt_charging_state" in self.coordinator.data:
             mqtt_payload = self.coordinator.data["mqtt_charging_state"]
@@ -115,7 +119,7 @@ class SmappeeCarConnectedBinarySensor(SmappeeBaseEntity, BinarySensorEntity):
                         return False
                     if state in ["CABLE_CONNECTED", "CHARGING", "SUSPENDED", "SUSPENDED_EV", "SUSPENDED_EVSE"]:
                         return True
-                    
+
                     if iec_status in ["B1", "B2", "C1", "C2", "D1", "D2"]:
                         return True
             except Exception:
@@ -125,29 +129,29 @@ class SmappeeCarConnectedBinarySensor(SmappeeBaseEntity, BinarySensorEntity):
         if self.coordinator.data and "charging_station_details" in self.coordinator.data:
             serial = getattr(self.client, "charging_station_serial", None)
             station_data = self.coordinator.data["charging_station_details"].get(str(serial))
-            
+
             if station_data:
                 for module in station_data.get("modules", []):
                     if "carCharger" in module and module["carCharger"]:
                         cc_data = module["carCharger"]
-                        
+
                         # Check ook hier direct de live IEC-status van de lader
                         rest_iec = str(cc_data.get("iecStatus", "")).upper()
                         if rest_iec.startswith("A"):
                             return False
-                            
+
                         if cc_data.get("connectionStatus") == "DISCONNECTED":
                             return False
                         if cc_data.get("connectionStatus") == "CONNECTED":
                             return True
-                            
+
                         status_dict = cc_data.get("status", {})
                         rest_state = str(status_dict.get("current", "")).upper()
                         if rest_state in ["AVAILABLE", "DISCONNECTED"]:
                             return False
                         if rest_state in ["CABLE_CONNECTED", "CHARGING", "SUSPENDED", "SUSPENDED_EV", "SUSPENDED_EVSE"]:
                             return True
-                            
+
                         if rest_iec in ["B1", "B2", "C1", "C2", "D1", "D2"]:
                             return True
 
@@ -170,7 +174,7 @@ class SmappeeCarConnectedBinarySensor(SmappeeBaseEntity, BinarySensorEntity):
                     return False
                 if cc_data.get("connectionStatus") == "DISCONNECTED":
                     return False
-                
+
                 status_dict = cc_data.get("status", {})
                 state = str(status_dict.get("current", "")).upper()
                 if state in ["AVAILABLE", "DISCONNECTED"]:

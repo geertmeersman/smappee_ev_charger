@@ -12,7 +12,7 @@ manifestfile = Path(__file__).parent / "manifest.json"
 try:
     with open(manifestfile) as json_file:
         manifest_data = json.load(json_file)
-    
+
     NAME = manifest_data.get("name", "Smappee Charger")
     VERSION = manifest_data.get("version", "1.0.0")
     ISSUEURL = manifest_data.get("issue_tracker", "")

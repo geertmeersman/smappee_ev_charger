@@ -1,6 +1,7 @@
-import aiohttp
 import logging
 import time
+
+import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -19,11 +20,11 @@ class SmappeeClient:
         self.username = username
         self.password = password
         self.session = session
-        
+
         self.token = None
         self.token_expires_at = 0
         self.user_id = None
-        
+
         self.charging_location_id = None
         self.charging_station_serial = None
         self.rfid_device_id = None
@@ -67,7 +68,7 @@ class SmappeeClient:
 
         # Gebruikt direct de servicelocations definitie (v11)
         url = f"{API_BASE_URL}/{SERVICELOCATIONS_API_VERSION}/user/servicelocations?fullDetails=true"
-        
+
         try:
             async with self.session.get(url, headers=headers) as response:
                 if response.status == 200:
@@ -103,7 +104,7 @@ class SmappeeClient:
                     if rfid_module and "smartDevice" in rfid_module:
                         self.rfid_device_id = rfid_module["smartDevice"].get("id")
                     return data
-                
+
                 _LOGGER.error("Fout bij ophalen laadstation details. HTTP Status: %s", response.status)
                 return None
         except Exception as e:
@@ -115,7 +116,7 @@ class SmappeeClient:
         headers = await self.get_headers()
         if not self.token:
             return False
-        
+
         # FIXED: We gebruiken nu het dynamic en loepzuivere service_location_id uit de aanroep!
         url = f"{API_BASE_URL}/{DEFAULT_API_VERSION}/servicelocation/{service_location_id}/homecontrol/smart/devices/{device_id}/actions/setChargingMode"
 
@@ -144,7 +145,7 @@ class SmappeeClient:
                 if response.status in (200, 201, 204):
                     _LOGGER.info("Laadmodus succesvol gewijzigd naar %s.", mode.upper())
                     return True
-                
+
                 raw_text = await response.text()
                 _LOGGER.error("Fout bij wijzigen laadmodus. Status: %s, Response: %s", response.status, raw_text)
                 return False
@@ -188,7 +189,7 @@ class SmappeeClient:
             return None
 
         car_charger_data = None
-        
+
         # Doorzoek de modules van het ontdekte laadstation
         for serial, station in station_details.items():
             modules = station.get("modules", [])
@@ -258,18 +259,18 @@ class SmappeeClient:
         """Haal alle servicelocaties op inclusief volledige details."""
         headers = await self.get_headers()
         url = f"{API_BASE_URL}/{SERVICELOCATIONS_API_VERSION}/user/servicelocations?fullDetails=true"
-        
+
         async with self.session.get(url, headers=headers) as response:
             if response.status == 200:
                 return await response.json()
             else:
-                raise Exception(f"Fout bij ophalen servicelocations: {response.status}")            
+                raise Exception(f"Fout bij ophalen servicelocations: {response.status}")
 
     async def get_smart_devices(self) -> list:
         """Haal alle smart devices (station, charger, led) op voor deze locatie."""
         headers = await self.get_headers()
         url = f"{API_BASE_URL}/{DEFAULT_API_VERSION}/servicelocation/{self.service_location_id}/homecontrol/smart/devices?excludedCategories="
-        
+
         try:
             async with self.session.get(url, headers=headers) as response:
                 if response.status == 200:
@@ -283,13 +284,13 @@ class SmappeeClient:
     async def set_led_brightness(self, smart_devices: list, led_device_id: str, brightness: int) -> bool:
         """Pas de helderheid van de LED aan via het overkoepelende CHARGINGSTATION device ID."""
         headers = await self.get_headers()
-        
+
         # 1. VIND HET JUISTE CHARGINGSTATION ID DYNAMISCH
         # We zoeken nu direct in de meegegeven lijst met apparaten uit de coordinator
         charging_station_id = None
         if smart_devices and isinstance(smart_devices, list):
             charging_station = next(
-                (d for d in smart_devices if d.get("type", {}).get("category") == "CHARGINGSTATION"), 
+                (d for d in smart_devices if d.get("type", {}).get("category") == "CHARGINGSTATION"),
                 None
             )
             if charging_station:
@@ -302,7 +303,7 @@ class SmappeeClient:
 
         # 2. BOUW DE KLOPPENDE URL
         url = f"{API_BASE_URL}/{DEFAULT_API_VERSION}/servicelocation/{self.service_location_id}/homecontrol/smart/devices/{charging_station_id}/actions/setBrightness"
-        
+
         payload = [
             {
                 "spec": {
@@ -334,7 +335,7 @@ class SmappeeClient:
                 if response.status in (200, 201, 204):
                     _LOGGER.info("LED helderheid succesvol aangepast naar %s%% via %s.", brightness, charging_station_id)
                     return True
-                
+
                 raw_text = await response.text()
                 _LOGGER.error("Fout bij aanpassen LED helderheid. Status: %s, Response: %s", response.status, raw_text)
                 return False
@@ -347,7 +348,7 @@ class SmappeeClient:
         headers = await self.get_headers()
         # De PATCH call gaat rechtstreeks naar de CARCHARGER module
         url = f"{API_BASE_URL}/{DEFAULT_API_VERSION}/servicelocation/{self.service_location_id}/homecontrol/smart/devices/{device_id}"
-        
+
         # Exact de payload structuur zoals vereist door de v10 API PATCH methode
         payload = {
             "configurationProperties": [
@@ -384,7 +385,7 @@ class SmappeeClient:
                 if response.status in (200, 201, 204):
                     _LOGGER.info("Grid Assistance succesvol aangepast naar %s A.", amps)
                     return True
-                
+
                 raw_text = await response.text()
                 _LOGGER.error("Fout bij aanpassen Grid Assistance. Status: %s, Response: %s", response.status, raw_text)
                 return False
@@ -395,7 +396,7 @@ class SmappeeClient:
     async def set_charger_availability(self, device_id: str, available: bool) -> bool:
         """Zet de beschikbaarheid van de laadpaal (true/false) via een v11 PATCH call."""
         headers = await self.get_headers()
-        
+
         # We gebruiken het correcte, dynamic laadpaal-serienummer dat in __init__.py is gezet
         if not self.charging_station_serial:
             _LOGGER.error("Kan beschikbaarheid niet aanpassen: charging_station_serial ontbreekt op de client.")
@@ -406,14 +407,14 @@ class SmappeeClient:
 
         try:
             _LOGGER.debug(
-                "Smappee laadpaal beschikbaarheid voor %s (S/N: %s) aanpassen naar %s via PATCH: %s", 
+                "Smappee laadpaal beschikbaarheid voor %s (S/N: %s) aanpassen naar %s via PATCH: %s",
                 device_id, self.charging_station_serial, available, url
             )
             async with self.session.patch(url, headers=headers, json=payload) as response:
                 if response.status in (200, 201, 204):
                     _LOGGER.info("Laadpaal beschikbaarheid succesvol aangepast naar %s.", available)
                     return True
-                
+
                 raw_text = await response.text()
                 _LOGGER.error("Fout bij aanpassen laadpaal beschikbaarheid. Status: %s, Response: %s", response.status, raw_text)
                 return False
@@ -439,7 +440,7 @@ class SmappeeClient:
                 if response.status in (200, 201, 204):
                     _LOGGER.info("Offline laadconfiguratie succesvol aangepast via v11.")
                     return True
-                
+
                 raw_text = await response.text()
                 _LOGGER.error("Fout bij aanpassen offline laden. Status: %s, Response: %s", response.status, raw_text)
                 return False
@@ -494,13 +495,13 @@ class SmappeeClient:
                 if response.status in (200, 201, 204):
                     _LOGGER.info("Smappee actie '%s' succesvol uitgevoerd.", action_name)
                     return True
-                
+
                 raw_text = await response.text()
                 _LOGGER.error("Fout bij uitvoeren actie %s. Status: %s, Response: %s", action_name, response.status, raw_text)
                 return False
         except Exception as e:
             _LOGGER.error("Uitzondering bij uitvoeren van Smappee actie %s: %s", action_name, e)
-            return False    
+            return False
 
     async def set_charging_percentage_limit(self, service_location_id: str | int, device_id: str, percentage: int) -> bool:
         """Stel de maximale laadsnelheid in als een percentage (0-100%)."""
@@ -540,7 +541,7 @@ class SmappeeClient:
                 if response.status in (200, 201, 204):
                     _LOGGER.info("Laadsnelheid percentage succesvol ingesteld op %s%% voor %s.", percentage, device_id)
                     return True
-                
+
                 raw_text = await response.text()
                 _LOGGER.error("Fout bij instellen laadpercentage. Status: %s, Response: %s", response.status, raw_text)
                 return False
@@ -594,7 +595,7 @@ class SmappeeClient:
                 if response.status in (200, 201, 204):
                     _LOGGER.info("Successfully executed action '%s' for device %s", action_name, device_id)
                     return True
-                
+
                 raw_text = await response.text()
                 _LOGGER.error("Failed device action '%s' (%s): %s", action_name, response.status, raw_text)
                 return False
@@ -610,7 +611,7 @@ class SmappeeClient:
             f"{API_BASE_URL}/{DEFAULT_API_VERSION}/servicelocation/{self.service_location_id}"
             f"/homecontrol/smart/devices/{device_id}/config"
         )
-        
+
         # Generic config update payload structure
         payload = [
             {
