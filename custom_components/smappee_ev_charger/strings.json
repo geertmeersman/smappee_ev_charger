@@ -1,110 +1,137 @@
 {
   "config": {
-    "step": {
-      "user": {
-        "title": "Connect to Smappee Cloud",
-        "description": "Enter your Smappee dashboard credentials.",
-        "data": {
-          "username": "Username",
-          "password": "Password"
-        }
-      },
-      "select_station": {
-        "title": "Select your charging station",
-        "description": "Choose the charging station you want to add to Home Assistant.",
-        "data": {
-          "station_id": "Charging Station"
-        }
-      }
-    },
     "error": {
       "cannot_connect": "Cannot connect to Smappee. Please check your logs or credentials.",
       "no_charging_stations_found": "Successfully logged in, but no locations with type 'CHARGINGSTATION' were found."
+    },
+    "step": {
+      "select_station": {
+        "data": {
+          "station_id": "Charging Station"
+        },
+        "description": "Choose the charging station you want to add to Home Assistant.",
+        "title": "Select your charging station"
+      },
+      "user": {
+        "data": {
+          "password": "Password",
+          "username": "Username"
+        },
+        "description": "Enter your Smappee dashboard credentials.",
+        "title": "Connect to Smappee Cloud"
+      }
     }
   },
   "entity": {
+    "binary_sensor": {
+      "car_connected": {
+        "name": "Car connected"
+      },
+      "network_status": {
+        "name": "Network status"
+      }
+    },
+    "button": {
+      "normal_charging_mode_button": {
+        "name": "Activate standard charging"
+      },
+      "pause_charging_button": {
+        "name": "Pause charging session"
+      },
+      "smart_charging_mode_button": {
+        "name": "Activate smart charging"
+      },
+      "stop_charging_button": {
+        "name": "Stop charging session"
+      }
+    },
     "device_tracker": {
       "charger_location_tracker": {
         "name": "Charger location"
       }
     },
-    "binary_sensor": {
-      "network_status": {
-        "name": "Network status"
-      },
-      "car_connected": {
-        "name": "Car connected"
-      }
-    },
-    "sensor": {
-      "charging_mode": {
-        "name": "Charging mode"
-      },
-      "optimization_strategy": {
-        "name": "Optimization strategy"
-      },
-      "charger_status": {
-        "name": "Charger status",
-        "state": {
-          "AVAILABLE": "Available",
-          "CABLE_CONNECTED": "Cable connected",
-          "CHARGING": "Charging",
-          "SUSPENDED_EVSE": "Paused by charger",
-          "CHARGING_FINISHED": "Charging finished",
-          "ERROR": "Error"
-        }
-      },
-      "max_current_limit": {
-        "name": "Max current limit"
-      },
-      "session_energy": {
-        "name": "Session energy"
-      },
-      "session_status": {
-        "name": "Session status"
-      },
-      "session_rfid": {
-        "name": "Session RFID"
-      },
-      "session_duration": {
-        "name": "Session duration"
-      },
-      "live_power": {
-        "name": "Live power"
-      },
-      "phase_configuration": {
-        "name": "Phase configuration"
-      },
-      "led_brightness": {
-        "name": "LED brightness"
-      }
-    },
     "number": {
-      "max_current_setting": {
-        "name": "Max current setting"
-      },
-      "led_brightness_setting": {
-        "name": "LED brightness setting"
+      "charge_percentage_limit": {
+        "name": "Charging power limit"
       },
       "grid_assistance_setting": {
         "name": "Grid assistance setting"
       },
-      "offline_failsafe_setting": {
-        "name": "Offline failsafe setting"
+      "led_brightness_setting": {
+        "name": "LED brightness setting"
       },
-      "charge_percentage_limit": {
-        "name": "Charging power limit"
+      "max_current_setting": {
+        "name": "Max current setting"
       },
       "min_excess_percentage": {
         "name": "Minimum solar excess"
+      },
+      "offline_failsafe_setting": {
+        "name": "Offline failsafe setting"
       }
     },
     "select": {
       "charging_mode_select": {
-        "name": "Charging mode"
+        "name": "Charging mode",
+        "state": {
+          "SMART": "Smart charging",
+          "SOLAR": "Solar surplus",
+          "STANDARD": "Standard (Fast)"
+        }
       },
       "phase_config_select": {
+        "name": "Phase configuration",
+        "state": {
+          "L1-L2-L3": "L1 - L2 - L3 (Standard)",
+          "L1-L3-L2": "L1 - L3 - L2",
+          "L2-L1-L3": "L2 - L1 - L3",
+          "L2-L3-L1": "L2 - L3 - L1",
+          "L3-L1-L2": "L3 - L1 - L2",
+          "L3-L2-L1": "L3 - L2 - L1"
+        }
+      }
+    },
+    "sensor": {
+      "charger_status": {
+        "name": "Charger status",
+        "state": {
+          "available": "Available",
+          "cable_connected": "Cable connected",
+          "charging": "Charging",
+          "charging_finished": "Charging finished",
+          "error": "Error",
+          "suspended_evse": "Paused by charger"
+        }
+      },
+      "charging_mode": {
+        "name": "Charging mode"
+      },
+      "led_brightness": {
+        "name": "LED brightness"
+      },
+      "live_power": {
+        "name": "Live power"
+      },
+      "max_current_limit": {
+        "name": "Max current limit"
+      },
+      "optimization_strategy": {
+        "name": "Optimization strategy"
+      },
+      "phase_configuration": {
         "name": "Phase configuration"
+      },
+      "session_duration": {
+        "name": "Session duration"
+      },
+      "session_energy": {
+        "name": "Session energy"
+      },
+      "session_rfid": {
+        "name": "Session RFID"
+      },
+      "session_status": {
+        "name": "Session status"
       }
     },
     "switch": {
@@ -113,20 +140,6 @@
       },
       "offline_charging": {
         "name": "Offline charging"
-      }
-    },
-    "button": {
-      "stop_charging_button": {
-        "name": "Stop charging session"
-      },
-      "pause_charging_button": {
-        "name": "Pause charging session"
-      },
-      "normal_charging_mode_button": {
-        "name": "Activate standard charging"
-      },
-      "smart_charging_mode_button": {
-        "name": "Activate smart charging"
       }
     }
   }

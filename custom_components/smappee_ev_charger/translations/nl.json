@@ -1,111 +1,82 @@
 {
   "config": {
-    "step": {
-      "user": {
-        "title": "Verbinden met Smappee Cloud",
-        "description": "Voer uw Smappee dashboard inloggegevens in.",
-        "data": {
-          "username": "Gebruikersnaam",
-          "password": "Wachtwoord"
-        }
-      },
-      "select_station": {
-        "title": "Selecteer uw laadstation",
-        "description": "Kies het laadstation dat u wilt toevoegen aan Home Assistant.",
-        "data": {
-          "station_id": "Laadstation"
-        }
-      }
-    },
     "error": {
       "cannot_connect": "Kan geen verbinding maken met Smappee. Controleer uw logs of inloggegevens.",
       "no_charging_stations_found": "Succesvol ingelogd, maar er zijn geen locaties van het type 'CHARGINGSTATION' gevonden."
+    },
+    "step": {
+      "select_station": {
+        "data": {
+          "station_id": "Laadstation"
+        },
+        "description": "Kies het laadstation dat u wilt toevoegen aan Home Assistant.",
+        "title": "Selecteer uw laadstation"
+      },
+      "user": {
+        "data": {
+          "password": "Wachtwoord",
+          "username": "Gebruikersnaam"
+        },
+        "description": "Voer uw Smappee dashboard inloggegevens in.",
+        "title": "Verbinden met Smappee Cloud"
+      }
     }
   },
   "entity": {
+    "binary_sensor": {
+      "car_connected": {
+        "name": "Voertuig verbonden"
+      },
+      "network_status": {
+        "name": "Netwerkstatus"
+      }
+    },
+    "button": {
+      "normal_charging_mode_button": {
+        "name": "Activeer standaard laden"
+      },
+      "pause_charging_button": {
+        "name": "Laadsessie pauzeren"
+      },
+      "smart_charging_mode_button": {
+        "name": "Activeer slim laden"
+      },
+      "stop_charging_button": {
+        "name": "Laadsessie stoppen"
+      }
+    },
     "device_tracker": {
       "charger_location_tracker": {
         "name": "Locatie laadstation"
       }
     },
-    "binary_sensor": {
-      "network_status": {
-        "name": "Netwerkstatus"
-      },
-      "car_connected": {
-        "name": "Voertuig verbonden"
-      }
-    },
-    "sensor": {
-      "charging_mode": {
-        "name": "Laadmodus (Sensor)"
-      },
-      "optimization_strategy": {
-        "name": "Optimalisatiestrategie"
-      },
-      "charger_status": {
-        "name": "Laadpaal status",
-        "state": {
-          "AVAILABLE": "Beschikbaar",
-          "CABLE_CONNECTED": "Kabel verbonden",
-          "CHARGING": "Aan het laden",
-          "SUSPENDED_EVSE": "Gepauzeerd door laadpaal",
-          "CHARGING_FINISHED": "Laden voltooid",
-          "ERROR": "Storing"
-        }
-      },
-      "max_current_limit": {
-        "name": "Maximale stroomlimiet"
-      },
-      "session_energy": {
-        "name": "Sessie energie"
-      },
-      "session_status": {
-        "name": "Sessie status"
-      },
-      "session_rfid": {
-        "name": "Sessie RFID"
-      },
-      "session_duration": {
-        "name": "Sessie duur"
-      },
-      "live_power": {
-        "name": "Live vermogen"
-      },
-      "phase_configuration": {
-        "name": "Faseconfiguratie (Sensor)"
-      },
-      "led_brightness": {
-        "name": "LED helderheid"
-      }
-    },
     "number": {
-      "max_current_setting": {
-        "name": "Maximale stroom instelling"
-      },
-      "led_brightness_setting": {
-        "name": "LED helderheid instelling"
+      "charge_percentage_limit": {
+        "name": "Laadstroom limiet (%)"
       },
       "grid_assistance_setting": {
         "name": "Grid assistance instelling"
       },
-      "offline_failsafe_setting": {
-        "name": "Offline failsafe instelling"
+      "led_brightness_setting": {
+        "name": "LED helderheid instelling"
       },
-      "charge_percentage_limit": {
-        "name": "Laadstroom limiet (%)"
+      "max_current_setting": {
+        "name": "Maximale stroom instelling"
       },
       "min_excess_percentage": {
         "name": "Minimaal zonne-overschot"
+      },
+      "offline_failsafe_setting": {
+        "name": "Offline failsafe instelling"
       }
     },
     "select": {
       "charging_mode_select": {
         "name": "Laadmodus",
         "state": {
-          "STANDARD": "Standaard (Snel)",
           "SMART": "Slim laden",
-          "SOLAR": "Zonne-energie"
+          "SOLAR": "Zonne-energie",
+          "STANDARD": "Standaard (Snel)"
         }
       },
       "phase_config_select": {
@@ -120,26 +91,55 @@
         }
       }
     },
+    "sensor": {
+      "charger_status": {
+        "name": "Laadpaal status",
+        "state": {
+          "available": "Beschikbaar",
+          "cable_connected": "Kabel verbonden",
+          "charging": "Aan het laden",
+          "charging_finished": "Laden voltooid",
+          "error": "Storing",
+          "suspended_evse": "Gepauzeerd door laadpaal"
+        }
+      },
+      "charging_mode": {
+        "name": "Laadmodus (Sensor)"
+      },
+      "led_brightness": {
+        "name": "LED helderheid"
+      },
+      "live_power": {
+        "name": "Live vermogen"
+      },
+      "max_current_limit": {
+        "name": "Maximale stroomlimiet"
+      },
+      "optimization_strategy": {
+        "name": "Optimalisatiestrategie"
+      },
+      "phase_configuration": {
+        "name": "Faseconfiguratie (Sensor)"
+      },
+      "session_duration": {
+        "name": "Sessie duur"
+      },
+      "session_energy": {
+        "name": "Sessie energie"
+      },
+      "session_rfid": {
+        "name": "Sessie RFID"
+      },
+      "session_status": {
+        "name": "Sessie status"
+      }
+    },
     "switch": {
       "charger_availability": {
         "name": "Laadstation beschikbaarheid"
       },
       "offline_charging": {
         "name": "Offline laden"
-      }
-    },
-    "button": {
-      "stop_charging_button": {
-        "name": "Laadsessie stoppen"
-      },
-      "pause_charging_button": {
-        "name": "Laadsessie pauzeren"
-      },
-      "normal_charging_mode_button": {
-        "name": "Activeer standaard laden"
-      },
-      "smart_charging_mode_button": {
-        "name": "Activeer slim laden"
       }
     }
   }

@@ -241,14 +241,14 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
                 if isinstance(mqtt_json, dict):
                     detailed_status = mqtt_json.get("status", {}).get("current")
                     if detailed_status:
-                        return str(detailed_status).upper()
+                        return str(detailed_status).lower()
 
                     charging_state = mqtt_json.get("chargingState")
                     if charging_state:
-                        return str(charging_state).upper()
+                        return str(charging_state).lower()
             except Exception:
                 if len(str(mqtt_payload)) <= 255:
-                    return str(mqtt_payload).upper()
+                    return str(mqtt_payload).lower()
 
         # 2. Secondary: Extract status values from rich v11 cached response blocks
         if (
@@ -269,21 +269,21 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
                             module["carCharger"].get("status", {}).get("current")
                         )
                         if rest_detailed:
-                            return str(rest_detailed).upper()
+                            return str(rest_detailed).lower()
 
                         rest_conn = module["carCharger"].get("connectionStatus")
                         if rest_conn:
-                            return str(rest_conn).upper()
+                            return str(rest_conn).lower()
 
         # 3. Fallback: Parse the generic flat v10 smart devices configuration registry
         data = self.smart_device_data
         if data:
             if "chargingState" in data and data.get("chargingState") is not None:
-                return str(data.get("chargingState")).upper()
+                return str(data.get("chargingState")).lower()
             if "connectionStatus" in data:
-                return str(data.get("connectionStatus")).upper()
+                return str(data.get("connectionStatus")).lower()
 
-        return "AVAILABLE"
+        return "available"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
