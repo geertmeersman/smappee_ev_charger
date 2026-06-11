@@ -3,6 +3,10 @@ name: Sync dev-current with main
 on:
   workflow_call: # Allows this to be called by other workflows
   workflow_dispatch: # Allows manual triggering
+  pull_request:
+    types: [closed]
+    branches:
+      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
