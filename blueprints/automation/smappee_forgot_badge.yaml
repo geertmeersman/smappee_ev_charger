@@ -1,0 +1,50 @@
+blueprint:
+  name: "Smappee: Forgot to Scan RFID Badge"
+  description: "Send a push notification when the charger remains in the available state for too long."
+  domain: automation
+  input:
+    charger_status_sensor:
+      name: Smappee Charger Status Sensor
+      description: The sensor that monitors the active operational status of the charger.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+    delay_time:
+      name: Delay Time
+      description: How long the charger must be 'available' before sending the alert.
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 60
+          unit_of_measurement: minutes
+          mode: slider
+    notify_device:
+      name: Notification Device
+      description: The smartphone device that will receive the push notification.
+      selector:
+        device:
+          filter:
+            - integration: mobile_app
+
+trigger:
+  - platform: state
+    entity_id: !input charger_status_sensor
+    to: "available"
+    for:
+      minutes: !input delay_time
+
+condition: []
+
+action:
+  - domain: mobile_app
+    type: notify
+    device_id: !input notify_device
+    title: "⚡ Smappee: Forgot to badge?"
+    message: "The charger has been available for {{ delay_minutes }} minutes. Don't forget to swipe your RFID card!"
+    data:
+      # Inject the input directly into the template variables registry block
+      delay_minutes: !input delay_time
+
+mode: single
