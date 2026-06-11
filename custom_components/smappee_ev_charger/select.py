@@ -100,8 +100,16 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
                         return "solar"
                     if charging_mode == "SMART":
                         return "smart"
-            except Exception:
-                pass
+            except json.JSONDecodeError as err:
+                _LOGGER.debug(
+                    "Failed to decode real-time MQTT payload for charging mode select: %s",
+                    err,
+                )
+            except Exception as err:
+                _LOGGER.error(
+                    "Unexpected error processing live charging mode select state: %s",
+                    err,
+                )
 
         # 2. Secondary: Extract attributes from cached v11 configuration detail maps
         if (

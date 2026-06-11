@@ -167,8 +167,16 @@ class SmappeeCarConnectedBinarySensor(SmappeeBaseEntity, BinarySensorEntity):
 
                     if iec_status in ["B1", "B2", "C1", "C2", "D1", "D2"]:
                         return True
-            except Exception:
-                pass
+            except json.JSONDecodeError as err:
+                _LOGGER.debug(
+                    "Failed to decode real-time MQTT payload for car connection state: %s",
+                    err,
+                )
+            except Exception as err:
+                _LOGGER.error(
+                    "Unexpected error processing live car connection binary state: %s",
+                    err,
+                )
 
         # 2. Secondary: Evaluate configuration elements derived from rich v11 cached response blocks
         if (

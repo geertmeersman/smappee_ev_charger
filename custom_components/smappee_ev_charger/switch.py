@@ -88,8 +88,16 @@ class SmappeeAvailabilitySwitch(SmappeeBaseEntity, SwitchEntity):
                 mqtt_json = json.loads(mqtt_payload)
                 if isinstance(mqtt_json, dict) and "available" in mqtt_json:
                     return bool(mqtt_json["available"])
-            except Exception:
-                pass
+            except json.JSONDecodeError as err:
+                _LOGGER.warning(
+                    "Failed to parse incoming MQTT payload cache for available flag: %s",
+                    err,
+                )
+            except Exception as err:
+                _LOGGER.error(
+                    "Unexpected runtime exception processing live status switch data: %s",
+                    err,
+                )
 
         data = self.smart_device_data
         if not data:
