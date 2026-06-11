@@ -70,7 +70,7 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
             device_type="charger",
             platform_domain="select",
         )
-        self._attr_options = ["STANDARD", "SMART", "SOLAR"]
+        self._attr_options = ["standard", "smart", "solar"]
 
     @property
     def unique_id(self) -> str:
