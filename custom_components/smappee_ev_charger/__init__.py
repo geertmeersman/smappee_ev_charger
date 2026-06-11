@@ -199,9 +199,8 @@ def _setup_mqtt_stream(
             local_topics.add(target_charging_topic)
 
         _LOGGER.info(
-            "Establishing isolated WebSocket connection for Smappee Location %s targeting topics: %s",
+            "Establishing isolated WebSocket connection for Smappee Location %s",
             loc_id,
-            list(local_topics),
         )
 
         # Instantiate a unique Paho client runner mapped strictly toward this isolated location signature profile
