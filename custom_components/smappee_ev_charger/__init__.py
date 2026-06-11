@@ -199,9 +199,8 @@ def _setup_mqtt_stream(
             local_topics.add(target_charging_topic)
 
         _LOGGER.info(
-            "Establishing isolated WebSocket connection for Smappee Location %s (User: %s) targeting topics: %s",
+            "Establishing isolated WebSocket connection for Smappee Location %s targeting topics: %s",
             loc_id,
-            mqtt_cfg["username"],
             list(local_topics),
         )
 
@@ -330,7 +329,10 @@ def _setup_mqtt_stream(
             try:
                 client_instance.loop_stop()
                 client_instance.disconnect()
-            except Exception:
-                pass
+            except Exception as err:
+                _LOGGER.warn(
+                    "Error encountered while disconnecting MQTT client instance safely: %s",
+                    err,
+                )
 
     entry.async_on_unload(stop_all_mqtt_loops)
