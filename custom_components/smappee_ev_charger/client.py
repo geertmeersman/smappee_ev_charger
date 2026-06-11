@@ -172,8 +172,10 @@ class SmappeeClient:
         success = await self.execute_device_action(
             device_id, "setChargingMode", payload, service_location_id
         )
-        if success and option == "SOLAR":
-            await self.update_configuration_property(
+        if not success:
+            return False
+        if option == "SOLAR":
+            success = await self.update_configuration_property(
                 device_id=device_id,
                 property_name="etc.smart.device.type.car.charger.config.min.excesspct",
                 value_dict={"Integer": 100},

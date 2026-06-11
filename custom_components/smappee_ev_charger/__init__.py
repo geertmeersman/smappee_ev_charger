@@ -260,10 +260,15 @@ async def _setup_mqtt_stream(
 
                     # CHANNEL A: Targeted charger hardware status update streaming payload context
                     if current_topic == charging_topic:
-                        coordinator.data["mqtt_locations"][l_id]["state"] = payload
-                        _LOGGER.critical(
-                            "Charging state target topic match identified!"
-                        )
+                        try:
+                            coordinator.data["mqtt_locations"][l_id]["state"] = (
+                                json.loads(payload)
+                            )
+                        except json.JSONDecodeError:
+                            _LOGGER.warning(
+                                "Failed to decode charging state payload: %s", payload
+                            )
+                            coordinator.data["mqtt_locations"][l_id]["state"] = {}
 
                         # Execute quick validation parsing strictly to satisfy dynamic execution timer context parameters
                         try:
