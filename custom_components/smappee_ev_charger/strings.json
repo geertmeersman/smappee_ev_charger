@@ -82,12 +82,12 @@
       "phase_config_select": {
         "name": "Phase configuration",
         "state": {
-          "L1-L2-L3": "L1 - L2 - L3 (Standard)",
-          "L1-L3-L2": "L1 - L3 - L2",
-          "L2-L1-L3": "L2 - L1 - L3",
-          "L2-L3-L1": "L2 - L3 - L1",
-          "L3-L1-L2": "L3 - L1 - L2",
-          "L3-L2-L1": "L3 - L2 - L1"
+          "l1-l2-l3": "L1 - L2 - L3 (Standard)",
+          "l1-l3-l2": "L1 - L3 - L2",
+          "l2-l1-l3": "L2 - L1 - L3",
+          "l2-l3-l1": "L2 - L3 - L1",
+          "l3-l1-l2": "L3 - L1 - L2",
+          "l3-l2-l1": "L3 - L2 - L1"
         }
       }
     },

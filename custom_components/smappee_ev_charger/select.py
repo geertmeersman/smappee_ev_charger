@@ -241,20 +241,20 @@ class SmappeePhaseRotationSelect(SmappeeBaseEntity, SelectEntity):
             platform_domain="select",
         )
         self._attr_options = [
-            "L1-L2-L3",
-            "L1-L3-L2",
-            "L2-L1-L3",
-            "L2-L3-L1",
-            "L3-L1-L2",
-            "L3-L2-L1",
+            "l1-l2-l3",
+            "l1-l3-l2",
+            "l2-l1-l3",
+            "l2-l3-l1",
+            "l3-l1-l2",
+            "l3-l2-l1",
         ]
         self._mapping = {
-            "L1-L2-L3": ["PHASEA", "PHASEB", "PHASEC"],
-            "L1-L3-L2": ["PHASEA", "PHASEC", "PHASEB"],
-            "L2-L1-L3": ["PHASEB", "PHASEA", "PHASEC"],
-            "L2-L3-L1": ["PHASEB", "PHASEC", "PHASEA"],
-            "L3-L1-L2": ["PHASEC", "PHASEA", "PHASEB"],
-            "L3-L2-L1": ["PHASEC", "PHASEB", "PHASEA"],
+            "l1-l2-l3": ["PHASEA", "PHASEB", "PHASEC"],
+            "l1-l3-l2": ["PHASEA", "PHASEC", "PHASEB"],
+            "l2-l1-l3": ["PHASEB", "PHASEA", "PHASEC"],
+            "l2-l3-l1": ["PHASEB", "PHASEC", "PHASEA"],
+            "l3-l1-l2": ["PHASEC", "PHASEA", "PHASEB"],
+            "l3-l2-l1": ["PHASEC", "PHASEB", "PHASEA"],
         }
 
     @property
