@@ -74,9 +74,9 @@
       "charging_mode_select": {
         "name": "Charging mode",
         "state": {
-          "SMART": "Smart charging",
-          "SOLAR": "Solar surplus",
-          "STANDARD": "Standard (Fast)"
+          "smart": "Smart charging",
+          "solar": "Solar surplus",
+          "standard": "Standard (Fast)"
         }
       },
       "phase_config_select": {

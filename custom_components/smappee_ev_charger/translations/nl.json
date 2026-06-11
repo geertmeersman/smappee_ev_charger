@@ -74,9 +74,9 @@
       "charging_mode_select": {
         "name": "Laadmodus",
         "state": {
-          "SMART": "Slim laden",
-          "SOLAR": "Zonne-energie",
-          "STANDARD": "Standaard (Snel)"
+          "smart": "Slim laden",
+          "solar": "Zonne-energie",
+          "standard": "Standaard (Snel)"
         }
       },
       "phase_config_select": {
