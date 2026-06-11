@@ -1,5 +1,18 @@
 # Changelog
 
+## [v0.2.0](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.2.0) (2026-06-11)
+
+[Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.1.2...v0.2.0)
+
+**Merged pull requests:**
+
+- fix: update sync workflow path to sync-dev-current.yml in release pro… [\#11](https://github.com/geertmeersman/smappee_ev_charger/pull/11) ([geertmeersman](https://github.com/geertmeersman))
+- fix: reorder imports and enhance dynamic index handling in SmappeeMat… [\#10](https://github.com/geertmeersman/smappee_ev_charger/pull/10) ([geertmeersman](https://github.com/geertmeersman))
+- refactor: Smappee EV Charger integration for improved multi-location support and enhanced error handling [\#9](https://github.com/geertmeersman/smappee_ev_charger/pull/9) ([geertmeersman](https://github.com/geertmeersman))
+- feat: add pull request trigger to sync workflow for closed PRs on main [\#8](https://github.com/geertmeersman/smappee_ev_charger/pull/8) ([geertmeersman](https://github.com/geertmeersman))
+- feat: enhance sync workflow by adding trigger-sync job and simplifyin… [\#7](https://github.com/geertmeersman/smappee_ev_charger/pull/7) ([geertmeersman](https://github.com/geertmeersman))
+- feat: implement SmappeeDataUpdateCoordinator and enhance sensor setup with energy mapping [\#6](https://github.com/geertmeersman/smappee_ev_charger/pull/6) ([geertmeersman](https://github.com/geertmeersman))
+
 ## [v0.1.2](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.1.2) (2026-06-11)
 
 [Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.1.1...v0.1.2)
