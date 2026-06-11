@@ -150,46 +150,36 @@ class SmappeeClient:
     ) -> bool:
         """Modify load management profile configurations targeting standard or balanced balancing matrices."""
         option = mode.upper()
-
-        if option in ("STANDARD", "SOLAR"):
-            api_mode = "STANDARD" if option == "STANDARD" else "SMART"
-
-            payload = [
-                {
-                    "spec": {
-                        "name": "mode",
-                        "species": "String",
-                        "required": True,
-                        "possibleValues": {
-                            "values": [
-                                {"String": "STANDARD"},
-                                {"String": "SMART"},
-                                {"String": "SOLAR"},
-                            ],
-                            "exhaustive": True,
-                        },
+        payload = [
+            {
+                "spec": {
+                    "name": "mode",
+                    "species": "String",
+                    "required": True,
+                    "possibleValues": {
+                        "values": [
+                            {"String": "STANDARD"},
+                            {"String": "SMART"},
+                            {"String": "SOLAR"},
+                        ],
+                        "exhaustive": True,
                     },
-                    "values": [{"String": api_mode}],
-                }
-            ]
+                },
+                "values": [{"String": option}],
+            }
+        ]
 
-            success = await self.execute_device_action(
-                device_id, "setChargingMode", payload, service_location_id
-            )
-            if success and option == "SOLAR":
-                # Fixed: Expressly pass service_location_id down to the property update
-                await self.update_configuration_property(
-                    device_id=device_id,
-                    property_name="etc.smart.device.type.car.charger.config.min.excesspct",
-                    value_dict={"Integer": 100},
-                    service_location_id=service_location_id,
-                )
-            return success
-
-        action_name = "smartChargingMode" if option == "SMART" else "normalChargingMode"
-        return await self.execute_device_action(
-            device_id, action_name, payload=[], service_location_id=service_location_id
+        success = await self.execute_device_action(
+            device_id, "setChargingMode", payload, service_location_id
         )
+        if success and option == "SOLAR":
+            await self.update_configuration_property(
+                device_id=device_id,
+                property_name="etc.smart.device.type.car.charger.config.min.excesspct",
+                value_dict={"Integer": 100},
+                service_location_id=service_location_id,
+            )
+        return success
 
     async def get_recent_sessions(self) -> list[dict[str, Any]]:
         """Fetch historical tracking summaries logging transactions finalized across the past week."""

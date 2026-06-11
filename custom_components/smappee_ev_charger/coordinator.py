@@ -28,6 +28,9 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.client = client
         self.power_mapping: dict[str, Any] = {}
         self.parent_location_id: str | None = None
+        self.high_level_configs: dict[str, Any] = (
+            {}
+        )  # Cache cache for multi-location MQTT tokens
 
         # Timer context for charging cycles
         self.timer_context: dict[str, Any] = {
@@ -51,7 +54,12 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.debug(
                         "Fetching Smappee v10 high-level tracking configuration schemas..."
                     )
+                    # Force the client onto the correct base ID from the main registry call first
+                    self.client.service_location_id = servicelocations[0].get("id")
+
+                    # Correctly called with await since it is an asynchronous coroutine
                     high_level_cfg = await self.client.get_high_level_configuration()
+
                     if high_level_cfg:
                         self.power_mapping = self._parse_high_level_configuration(
                             high_level_cfg
@@ -122,6 +130,48 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self.parent_location_id = str(current_loc.get("parentId"))
                     break
 
+            # 3. MULTI-LOCATION CONFIG CACHING (With proper Asynchronous Context Switches)
+            entry_loc_id = str(self.config_entry.data.get("station_id"))
+            parent_loc_id = (
+                str(self.parent_location_id) if self.parent_location_id else None
+            )
+
+            target_ids = {entry_loc_id}
+            if parent_loc_id:
+                target_ids.add(parent_loc_id)
+
+            # Store the original ID to clean up and restore the client's context status after the loop
+            original_service_location_id = self.client.service_location_id
+
+            for loc_id in target_ids:
+                try:
+                    _LOGGER.debug(
+                        "Switching client location context to %s before calling high-level configurations",
+                        loc_id,
+                    )
+                    # Update the target ID internally inside the client right before executing the network tracking request
+                    self.client.service_location_id = (
+                        int(loc_id) if loc_id.isdigit() else loc_id
+                    )
+
+                    config_res = await self.client.get_high_level_configuration()
+
+                    if config_res:
+                        self.high_level_configs[loc_id] = config_res
+                        _LOGGER.info(
+                            "Successfully cached high-level configuration via client context switch for location %s",
+                            loc_id,
+                        )
+                except Exception as err:
+                    _LOGGER.error(
+                        "Failed fetching highlevelconfiguration via client switch for %s: %s",
+                        loc_id,
+                        err,
+                    )
+
+            # Restore the original client state context for any subsequent background REST calls
+            self.client.service_location_id = original_service_location_id
+
             recent_sessions = await self.client.get_recent_sessions()
 
             new_data = {
@@ -129,16 +179,11 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "smart_devices": all_smart_devices,
                 "charging_station_details": charging_station_details,
                 "recent_sessions": recent_sessions,
-                "mqtt_power_data": {},
-                "raw_mqtt_charging_state": {},
+                "mqtt_locations": {},
             }
 
-            # Prevent live pushed MQTT data blocks from being blanked out by the base REST updates
-            if self.data:
-                if "mqtt_charging_state" in self.data:
-                    new_data["mqtt_charging_state"] = self.data["mqtt_charging_state"]
-                if "mqtt_power_data" in self.data:
-                    new_data["mqtt_power_data"] = self.data["mqtt_power_data"]
+            if self.data and "mqtt_locations" in self.data:
+                new_data["mqtt_locations"] = self.data["mqtt_locations"]
 
             return new_data
 
@@ -240,8 +285,8 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _parse_high_level_configuration(self, cfg: dict) -> dict[str, Any]:
         """Parse explicit MQTT array element positions out of the high-level configuration payload."""
         mapping: dict[str, Any] = {
-            "grid": {"energy": []},
-            "pv": {"energy": []},
+            "grid": {"energy": [], "array_key": "activePowerData"},
+            "pv": {"energy": [], "array_key": "activePowerData"},
             "cars": {},
         }
 
@@ -256,10 +301,17 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             aspect_paths = reading_source.get("aspectPaths") or []
 
-            # Parse out the integer from strings like "$.importActiveEnergyData[0]" or "$.activePowerData[0]"
+            # Parse out the integer from strings like "$.importActiveEnergyData[0]" or "$.channelData[3]"
             indices = []
+            array_source = "activePowerData"
+
             for path_obj in aspect_paths:
                 path_str = path_obj.get("path", "")
+                if "channelData" in path_str:
+                    array_source = "channelData"
+                elif "importActiveEnergyData" in path_str:
+                    array_source = "importActiveEnergyData"
+
                 if "[" in path_str and "]" in path_str:
                     try:
                         idx_str = path_str.split("[")[-1].split("]")[0]
@@ -269,19 +321,22 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             if mtype == "GRID":
                 mapping["grid"]["energy"] = list(set(indices))
+                mapping["grid"]["array_key"] = array_source
             elif mtype == "PRODUCTION":
                 mapping["pv"]["energy"] = list(set(indices))
+                mapping["pv"]["array_key"] = array_source
             elif (
                 mtype == "APPLIANCE"
                 and meas.get("appliance", {}).get("type") == "CAR_CHARGER"
             ):
-                # Fallback to local array positioning if meterReadings isn't structurally provided
                 if not indices:
                     indices = [0, 1, 2]  # Default fallback for 3-phase chargers
 
-                # Smappee uses measurements ids or location contexts to map specific car nodes
                 meas_id = str(meas.get("id", "charger"))
-                mapping["cars"][meas_id] = {"energy": list(set(indices))}
+                mapping["cars"][meas_id] = {
+                    "energy": list(set(indices)),
+                    "array_key": array_source,
+                }
 
         # Hardcoded fallback safety checks if the response format is sparse
         if not mapping["grid"]["energy"]:

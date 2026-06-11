@@ -127,143 +127,210 @@ def _setup_mqtt_stream(
     coordinator: SmappeeDataUpdateCoordinator,
     client: SmappeeClient,
 ) -> None:
-    """Initialize and connect the persistent background WebSocket MQTT streaming client."""
-    if not coordinator.data:
-        return
-
-    charging_station_details_live = coordinator.data.get("charging_station_details", {})
-    mqtt_config = client.get_mqtt_config(charging_station_details_live)
-
-    if not mqtt_config:
-        _LOGGER.warning(
-            "Asynchronous push streaming monitoring aborted: telemetry map extraction yielded no tokens."
-        )
-        return
-
-    _LOGGER.info(
-        "Smappee cloud streaming telemetry specifications verified. Attaching WebSocket transport links..."
-    )
-
-    mqtt_client = mqtt_paho.Client(
-        callback_api_version=mqtt_paho.CallbackAPIVersion.VERSION1,
-        transport="websockets",
-    )
-    mqtt_client.username_pw_set(mqtt_config["username"], mqtt_config["password"])
-
-    hass.async_add_executor_job(mqtt_client.tls_set)
-    mqtt_client.reconnect_delay_set(min_delay=1, max_delay=120)
-
-    target_charging_topic = str(mqtt_config.get("charging_state_topic", "")).lower()
-    target_power_topic = str(mqtt_config.get("power_topic", "")).lower()
-
-    def on_connect(paho_client: Any, userdata: Any, flags: Any, rc: int) -> None:
-        if rc == 0:
-            _LOGGER.info(
-                "Successfully established connection loops toward Smappee cloud streaming servers."
-            )
-            for topic_key in ["power_topic", "charging_state_topic"]:
-                topic_name = mqtt_config.get(topic_key)
-                if topic_name:
-                    paho_client.subscribe(topic_name)
-                    _LOGGER.debug(
-                        "Mounted persistent subscription panel tracking: %s", topic_name
-                    )
-        else:
-            _LOGGER.error(
-                "Smappee cloud streaming broker rejected authentication check. Code: %s",
-                rc,
-            )
-
-    def on_disconnect(paho_client: Any, userdata: Any, rc: int) -> None:
-        if rc != 0:
-            _LOGGER.warning(
-                "Smappee cloud streaming socket transport dropped. Instantiating auto-reconnect loops..."
-            )
-
-    def on_message(paho_client: Any, userdata: Any, msg: Any) -> None:
-        payload = msg.payload.decode("utf-8")
-        current_topic_lower = str(msg.topic).lower()
-
-        if current_topic_lower == target_charging_topic:
-            _LOGGER.debug(
-                "Asynchronous streaming charger operational state update encountered on: %s",
-                msg.topic,
-            )
-        elif current_topic_lower != target_power_topic:
-            _LOGGER.debug(
-                "Asynchronous streaming telemetry element received on topic: %s",
-                msg.topic,
-            )
-
-        async def async_update_coordinator_data() -> None:
-            # Zorg dat de coordinator opgestart is en data bevat
-            if coordinator.data is None:
-                coordinator.data = {}
-
-            if current_topic_lower == target_charging_topic:
-                # Sla de charging state op in de coordinator data container
-                coordinator.data["mqtt_charging_state"] = payload
-
-                try:
-                    mqtt_json = json.loads(payload)
-                    if isinstance(mqtt_json, dict):
-                        status_obj = mqtt_json.get("status", {})
-                        state = str(
-                            status_obj.get(
-                                "current", mqtt_json.get("chargingState", "")
-                            )
-                        ).upper()
-                        coordinator.timer_context["handler"](state == "CHARGING")
-                except Exception as err:
-                    _LOGGER.error(
-                        "Failed calculating transient execution bounds from stream metrics: %s",
-                        err,
-                    )
-
-                # CRUCIAL: Laat de coordinator weten dat er nieuwe data is zodat sensoren verversen!
-                coordinator.async_set_updated_data(coordinator.data)
-
-            elif current_topic_lower == target_power_topic:
-                try:
-                    # Sla de power data op (voor je live power én je nieuwe energiesensoren)
-                    coordinator.data["mqtt_power_data"] = json.loads(payload)
-                except Exception:
-                    coordinator.data["mqtt_power_data"] = payload
-
-                # CRUCIAL: Laat de coordinator weten dat er nieuwe data is zodat sensoren verversen!
-                coordinator.async_set_updated_data(coordinator.data)
-
-        hass.loop.call_soon_threadsafe(
-            lambda: hass.async_create_task(async_update_coordinator_data())
-        )
-
-    mqtt_client.on_connect = on_connect
-    mqtt_client.on_disconnect = on_disconnect
-    mqtt_client.on_message = on_message
-
-    try:
-        broker_host = mqtt_config.get("host", "dashboard.smappee.net")
-        broker_port = mqtt_config.get("port", 443)
-
-        mqtt_client.connect_async(broker_host, broker_port, keepalive=60)
-        mqtt_client.loop_start()
-
-        def stop_mqtt_loop(_event: Any = None) -> None:
-            _LOGGER.info(
-                "Tearing down open Smappee streaming network sockets and tracking loops..."
-            )
-            if coordinator.timer_context["session_interval_unsub"]:
-                coordinator.timer_context["session_interval_unsub"]()
-            mqtt_client.loop_stop()
-            mqtt_client.disconnect()
-
-        entry.async_on_unload(stop_mqtt_loop)
-        entry.async_on_unload(
-            hass.bus.async_listen_once("homeassistant_stop", stop_mqtt_loop)
-        )
-
-    except Exception as conn_err:
+    """Initialize dedicated MQTT connection loops for each unique Smappee hub location."""
+    if (
+        not hasattr(coordinator, "high_level_configs")
+        or not coordinator.high_level_configs
+    ):
         _LOGGER.error(
-            "Critical failure during websocket socket transport initialization: %s",
-            conn_err,
+            "MQTT streaming aborted: No high-level configuration payloads cached in coordinator."
         )
+        return
+
+    entry_loc_id = str(entry.data.get("station_id"))
+    charging_station_details_live = coordinator.data.get("charging_station_details", {})
+
+    # Fetch baseline MQTT configuration parameters via client definitions (contains the long charging_state_topic path)
+    client_mqtt_config = client.get_mqtt_config(charging_station_details_live) or {}
+    target_charging_topic = str(
+        client_mqtt_config.get("charging_state_topic", "")
+    ).lower()
+
+    active_mqtt_clients = []
+
+    # Iterate through all location payloads (e.g., 317418 for Grid/PV and 317443 for the Charger)
+    for loc_id, config_payload in coordinator.high_level_configs.items():
+        mqtt_cfg = None
+
+        # 1. Search for explicit MQTT channel targets inside the measurements collection block (e.g., Grid/PV configurations)
+        if "measurements" in config_payload:
+            for meas in config_payload.get("measurements", []):
+                ch = meas.get("updateChannels", {}).get("activePower", {})
+                if ch.get("protocol") == "MQTT" and ch.get("userName"):
+                    mqtt_cfg = {
+                        "username": ch["userName"],
+                        "password": ch["password"],
+                        "topic": ch["name"],
+                    }
+                    break
+
+        # 2. Fallback routing sequence: Inspect root updateChannels definitions (e.g., matching local charger contexts)
+        if not mqtt_cfg:
+            channels = (
+                config_payload.get("updateChannels", {}) if config_payload else {}
+            )
+            active_power_cfg = channels.get("activePower", {})
+            if (
+                active_power_cfg
+                and active_power_cfg.get("protocol") == "MQTT"
+                and active_power_cfg.get("userName")
+            ):
+                mqtt_cfg = {
+                    "username": active_power_cfg["userName"],
+                    "password": active_power_cfg["password"],
+                    "topic": active_power_cfg["name"],
+                }
+
+        # Skip out if no operational MQTT authentication specifications could be resolved for this hub instance
+        if not mqtt_cfg:
+            _LOGGER.warning(
+                "No explicit MQTT parameters found in high-level payload for location %s",
+                loc_id,
+            )
+            continue
+
+        # Aggregate unique tracking topics intended for THIS explicit socket worker context
+        local_topics = set()
+        local_topics.add(str(mqtt_cfg["topic"]).lower())
+
+        # If this location context matches the core configuration entity hub (the charger proxy registry),
+        # attach the dynamic long-path charging state topic straight into this connection instance
+        if loc_id == entry_loc_id and target_charging_topic:
+            local_topics.add(target_charging_topic)
+
+        _LOGGER.info(
+            "Establishing isolated WebSocket connection for Smappee Location %s (User: %s) targeting topics: %s",
+            loc_id,
+            mqtt_cfg["username"],
+            list(local_topics),
+        )
+
+        # Instantiate a unique Paho client runner mapped strictly toward this isolated location signature profile
+        mqtt_client = mqtt_paho.Client(
+            callback_api_version=mqtt_paho.CallbackAPIVersion.VERSION1,
+            transport="websockets",
+        )
+        mqtt_client.username_pw_set(mqtt_cfg["username"], mqtt_cfg["password"])
+        hass.async_add_executor_job(mqtt_client.tls_set)
+        mqtt_client.reconnect_delay_set(min_delay=1, max_delay=120)
+
+        # Functional callback factories built to block state leakage across distinct background connection scopes
+        def make_on_connect(topics_list: set, l_id: str):
+            def on_connect(
+                paho_client: Any, userdata: Any, flags: Any, rc: int
+            ) -> None:
+                if rc == 0:
+                    _LOGGER.info(
+                        "MQTT Connection successful for Location Hub: %s", l_id
+                    )
+                    for topic_name in topics_list:
+                        paho_client.subscribe(topic_name)
+                        _LOGGER.info("Successfully subscribed to topic: %s", topic_name)
+                else:
+                    _LOGGER.error(
+                        "Smappee broker rejected authorization for location %s. Code: %s",
+                        l_id,
+                        rc,
+                    )
+
+            return on_connect
+
+        def make_on_message(l_id: str, charging_topic: str):
+            def on_message(paho_client: Any, userdata: Any, msg: Any) -> None:
+                payload = msg.payload.decode("utf-8")
+                current_topic = str(msg.topic).lower()
+
+                _LOGGER.debug(
+                    "Smappee MQTT [Incoming] | Hub: %s | Topic: %s | Payload: %s",
+                    l_id,
+                    current_topic,
+                    payload,
+                )
+
+                async def async_update_coordinator_data() -> None:
+                    if not coordinator.data:
+                        return
+
+                    # Guarantee structural map partitions exist for each separate location identity
+                    if "mqtt_locations" not in coordinator.data:
+                        coordinator.data["mqtt_locations"] = {}
+                    if l_id not in coordinator.data["mqtt_locations"]:
+                        coordinator.data["mqtt_locations"][l_id] = {
+                            "power": {},
+                            "state": {},
+                        }
+
+                    # CHANNEL A: Targeted charger hardware status update streaming payload context
+                    if current_topic == charging_topic:
+                        coordinator.data["mqtt_locations"][l_id]["state"] = payload
+                        _LOGGER.critical(
+                            "Charging state target topic match identified!"
+                        )
+
+                        # Execute quick validation parsing strictly to satisfy dynamic execution timer context parameters
+                        try:
+                            mqtt_json = json.loads(payload)
+                            if isinstance(mqtt_json, dict):
+                                status_obj = mqtt_json.get("status", {})
+                                state = str(
+                                    status_obj.get(
+                                        "current", mqtt_json.get("chargingState", "")
+                                    )
+                                ).upper()
+                                coordinator.timer_context["handler"](
+                                    state == "CHARGING"
+                                )
+                        except Exception as err:
+                            _LOGGER.error(
+                                "Failed calculating transient execution bounds: %s", err
+                            )
+
+                    # CHANNEL B: Dense sequential matrix telemetry registers (Power, Currents, and Voltages arrays)
+                    else:
+                        try:
+                            parsed_json = json.loads(payload)
+                            if isinstance(parsed_json, dict) and (
+                                "activePowerData" in parsed_json
+                                or "importActiveEnergyData" in parsed_json
+                            ):
+                                coordinator.data["mqtt_locations"][l_id][
+                                    "power"
+                                ] = parsed_json
+                            else:
+                                coordinator.data["mqtt_locations"][l_id][
+                                    "power"
+                                ] = payload
+                        except Exception:
+                            coordinator.data["mqtt_locations"][l_id]["power"] = payload
+
+                    # Forward state modifications directly downstream into core platform tracker classes
+                    coordinator.async_set_updated_data(coordinator.data)
+
+                hass.loop.call_soon_threadsafe(
+                    lambda: hass.async_create_task(async_update_coordinator_data())
+                )
+
+            return on_message
+
+        mqtt_client.on_connect = make_on_connect(local_topics, loc_id)
+        mqtt_client.on_message = make_on_message(loc_id, target_charging_topic)
+
+        try:
+            mqtt_client.connect_async("dashboard.smappee.net", 443, keepalive=60)
+            mqtt_client.loop_start()
+            active_mqtt_clients.append(mqtt_client)
+        except Exception as conn_err:
+            _LOGGER.error(
+                "Failed mounting WebSocket loop for location %s: %s", loc_id, conn_err
+            )
+
+    def stop_all_mqtt_loops(_event: Any = None) -> None:
+        _LOGGER.info("Tearing down all active Smappee background network channels...")
+        for client_instance in active_mqtt_clients:
+            try:
+                client_instance.loop_stop()
+                client_instance.disconnect()
+            except Exception:
+                pass
+
+    entry.async_on_unload(stop_all_mqtt_loops)

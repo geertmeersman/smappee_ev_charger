@@ -40,7 +40,7 @@ async def async_setup_entry(
 
     entities: list[SensorEntity] = []
 
-    # 1. Existing Logic: Dynamic smart device discovery loop
+    # 1. Core Discovery Logic: Dynamic smart device discovery loop
     if coordinator.data and "smart_devices" in coordinator.data:
         smart_devices = coordinator.data["smart_devices"]
 
@@ -77,17 +77,48 @@ async def async_setup_entry(
                     ]
                 )
 
-    # 2. New Logic: Sequential dense matrix energy sensors mapped from MQTT arrays
-    # Add Grid Import Energy Sensor
-    entities.append(SmappeeEnergySensor(coordinator, entry, "grid"))
+    # 2. Dynamic multi-location context routing setup
+    master_station_id = str(
+        entry.data.get("station_id")
+    )  # The charger hub (e.g., 317443)
+    parent_grid_id = (
+        str(coordinator.parent_location_id) if coordinator.parent_location_id else None
+    )
 
-    # Add Solar Production Energy Sensor
-    entities.append(SmappeeEnergySensor(coordinator, entry, "pv"))
+    # Safe layout registry mapping matching verified cached data frames
+    if hasattr(coordinator, "high_level_configs") and coordinator.high_level_configs:
+        for loc_id in coordinator.high_level_configs:
+            loc_id_str = str(loc_id)
 
-    # Add individual charging station energy entities based on discovered car mapping UUIDs
-    if coordinator.power_mapping and "cars" in coordinator.power_mapping:
-        for car_uuid in coordinator.power_mapping["cars"]:
-            entities.append(SmappeeEnergySensor(coordinator, entry, "car", car_uuid))
+            if loc_id_str == parent_grid_id:
+                _LOGGER.info(
+                    "Mounting P1 GRID matrix sensors (Energy & Power) for location %s",
+                    loc_id_str,
+                )
+                entities.append(
+                    SmappeeMatrixSensor(coordinator, entry, "grid", loc_id_str)
+                )
+                entities.append(
+                    SmappeeMatrixSensor(coordinator, entry, "grid_power", loc_id_str)
+                )
+                entities.append(
+                    SmappeeMatrixSensor(coordinator, entry, "pv", loc_id_str)
+                )
+                entities.append(
+                    SmappeeMatrixSensor(coordinator, entry, "pv_power", loc_id_str)
+                )
+
+            elif loc_id_str == master_station_id:
+                _LOGGER.info(
+                    "Mounting MID CAR_CHARGER matrix sensors (Energy & Power) for location %s",
+                    loc_id_str,
+                )
+                entities.append(
+                    SmappeeMatrixSensor(coordinator, entry, "car", loc_id_str)
+                )
+                entities.append(
+                    SmappeeMatrixSensor(coordinator, entry, "car_power", loc_id_str)
+                )
 
     if entities:
         async_add_entities(entities)
@@ -180,7 +211,7 @@ class SmappeeBaseEntity(CoordinatorEntity[SmappeeDataUpdateCoordinator]):
         )
         model_name = data.get("model", "WALL_QUANTUM_CABLE")
 
-        device_name = "Smappee laadstation - EV Wall"
+        device_name = "Smappee Charging Station - EV Wall"
         if self.coordinator.data and "smart_devices" in self.coordinator.data:
             smart_devices = self.coordinator.data["smart_devices"]
             charging_station_data = next(
@@ -193,7 +224,7 @@ class SmappeeBaseEntity(CoordinatorEntity[SmappeeDataUpdateCoordinator]):
             )
             if charging_station_data:
                 display_name = charging_station_data.get("type", {}).get(
-                    "displayName", "Smappee laadstation"
+                    "displayName", "Smappee Charging Station"
                 )
                 custom_name = charging_station_data.get("name", "EV Wall")
                 device_name = f"{display_name} - {custom_name}"
@@ -230,14 +261,9 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
 
     def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
         """Initialize the Smappee status sensor."""
-        super().__init__(
-            coordinator,
-            client,
-            entry_title,
-            device_id=device_id,
-            device_type="charger",
-            platform_domain="sensor",
-        )
+        super().__init__(coordinator, client, entry_title, device_id=device_id)
+        # Fallback tracking resolution context to extract location mapping keys smoothly
+        self.mapped_location_id = str(coordinator.config_entry.data.get("station_id"))
 
     @property
     def unique_id(self) -> str:
@@ -245,84 +271,8 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
         return f"{self.device_id}_charger_status"
 
     @property
-    def native_value(self) -> str:
-        """Determine the current active station operational status string."""
-        if self.coordinator.data and "mqtt_charging_state" in self.coordinator.data:
-            mqtt_payload = self.coordinator.data["mqtt_charging_state"]
-            try:
-                mqtt_json = json.loads(mqtt_payload)
-                if isinstance(mqtt_json, dict):
-                    detailed_status = mqtt_json.get("status", {}).get("current")
-                    if detailed_status:
-                        return str(detailed_status).lower()
-
-                    charging_state = mqtt_json.get("chargingState")
-                    if charging_state:
-                        return str(charging_state).lower()
-            except Exception:
-                if len(str(mqtt_payload)) <= 255:
-                    return str(mqtt_payload).lower()
-
-        if (
-            self.coordinator.data
-            and "charging_station_details" in self.coordinator.data
-        ):
-            serial = getattr(self.client, "charging_station_serial", None)
-            station_data = (
-                self.coordinator.data["charging_station_details"].get(str(serial))
-                if serial
-                else None
-            )
-
-            if station_data:
-                for module in station_data.get("modules", []):
-                    if "carCharger" in module and module["carCharger"]:
-                        rest_detailed = (
-                            module["carCharger"].get("status", {}).get("current")
-                        )
-                        if rest_detailed:
-                            return str(rest_detailed).lower()
-
-                        rest_conn = module["carCharger"].get("connectionStatus")
-                        if rest_conn:
-                            return str(rest_conn).lower()
-
-        data = self.smart_device_data
-        if data:
-            if "chargingState" in data and data.get("chargingState") is not None:
-                return str(data.get("chargingState")).lower()
-            if "connectionStatus" in data:
-                return str(data.get("connectionStatus")).lower()
-
-        return "available"
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Store additional contextual live parameters inside state metadata arrays."""
-        if self.coordinator.data and "mqtt_charging_state" in self.coordinator.data:
-            mqtt_payload = self.coordinator.data["mqtt_charging_state"]
-            try:
-                mqtt_json = json.loads(mqtt_payload)
-                if isinstance(mqtt_json, dict):
-                    return {
-                        "available": mqtt_json.get("available"),
-                        "percentage_limit": mqtt_json.get("percentageLimit"),
-                        "charging_mode": mqtt_json.get("chargingMode"),
-                        "optimization_strategy": mqtt_json.get("optimizationStrategy"),
-                        "iec_status": mqtt_json.get("iecStatus", {}).get("current"),
-                        "detailed_status": mqtt_json.get("status", {}).get("current"),
-                    }
-            except json.JSONDecodeError as err:
-                _LOGGER.debug("Failed to decode real-time MQTT payload JSON: %s", err)
-            except Exception as err:
-                _LOGGER.error(
-                    "Unexpected error parsing live telemetry sensor metrics: %s", err
-                )
-        return None
-
-    @property
     def icon(self) -> str:
-        """Return a dynamic icon mapping matching the current parsed charger status."""
+        """Return a dynamic icon based on the operational charger status."""
         status = self.native_value
         if not status:
             return "mdi:ev-station"
@@ -348,6 +298,56 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
 
         return "mdi:ev-station"
 
+    @property
+    def native_value(self) -> str:
+        """Determine the current active station operational status string."""
+        # Isolate targeting tracking properties derived directly from the dynamic master list definition maps
+        data = self.smart_device_data
+        location_id = str(data.get("serviceLocation", self.mapped_location_id))
+
+        # 1. Primary Route: Fetch from the cleanly isolated multi-location MQTT cache map
+        if self.coordinator.data and "mqtt_locations" in self.coordinator.data:
+            location_data = self.coordinator.data["mqtt_locations"].get(location_id, {})
+            mqtt_payload = location_data.get("state")
+
+            if mqtt_payload:
+                with suppress(Exception):
+                    mqtt_json = (
+                        mqtt_payload
+                        if isinstance(mqtt_payload, dict)
+                        else json.loads(mqtt_payload)
+                    )
+                    if isinstance(mqtt_json, dict):
+                        detailed_status = mqtt_json.get("status", {}).get("current")
+                        if detailed_status:
+                            return str(detailed_status).lower()
+                        charging_state = mqtt_json.get("chargingState")
+                        if charging_state:
+                            return str(charging_state).lower()
+
+        # 2. FALLBACK: Safe deep inspection of the nested REST cloud metadata layers
+        if data:
+            car_charger = data.get("carCharger")
+            if isinstance(car_charger, dict):
+                # Primary rest fallback: Parse explicit internal carCharger running parameters
+                status_block = car_charger.get("status", {})
+                current_status = status_block.get("current")
+                if current_status:
+                    return str(current_status).lower()
+
+                # Secondary rest fallback: Extract interface connectivity profiles
+                conn_status = car_charger.get("connectionStatus")
+                if conn_status:
+                    return str(conn_status).lower()
+
+            # Legacy fallback loops if fields are flattened on sparse responses
+            if "chargingState" in data and data.get("chargingState") is not None:
+                return str(data.get("chargingState")).lower()
+            if "connectionStatus" in data:
+                return str(data.get("connectionStatus")).lower()
+
+        return "available"
+
 
 class SmappeeLivePowerSensor(SmappeeBaseEntity, SensorEntity):
     """Monitor the real-time active power delivery tracking in kilowatts."""
@@ -357,17 +357,11 @@ class SmappeeLivePowerSensor(SmappeeBaseEntity, SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
     _attr_suggested_display_precision = 2
+    _attr_icon = "mdi:flash"
 
     def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
         """Initialize the Smappee live power sensor."""
-        super().__init__(
-            coordinator,
-            client,
-            entry_title,
-            device_id=device_id,
-            device_type="charger",
-            platform_domain="sensor",
-        )
+        super().__init__(coordinator, client, entry_title, device_id=device_id)
 
     @property
     def unique_id(self) -> str:
@@ -376,41 +370,33 @@ class SmappeeLivePowerSensor(SmappeeBaseEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Calculate active phase telemetry power values and convert them to kilowatts."""
+        """Calculate active phase telemetry power values for the charger dynamically."""
         raw_watts = None
 
-        if self.coordinator.data and "mqtt_power_data" in self.coordinator.data:
-            mqtt_data = self.coordinator.data["mqtt_power_data"]
-            if isinstance(mqtt_data, dict) and "activePowerData" in mqtt_data:
-                with suppress(TypeError, ValueError):
-                    raw_watts = float(sum(mqtt_data["activePowerData"]))
+        if self.coordinator.data and "mqtt_locations" in self.coordinator.data:
+            entry_loc_id = str(self.entry_title)
+            if "smart_devices" in self.coordinator.data:
+                for dev in self.coordinator.data["smart_devices"]:
+                    if dev.get("id") == self.device_id and dev.get("serviceLocation"):
+                        entry_loc_id = str(dev.get("serviceLocation"))
+                        break
 
-        if (
-            raw_watts is None
-            and self.coordinator.data
-            and "charging_station_details" in self.coordinator.data
-        ):
-            serial = getattr(self.client, "charging_station_serial", None)
-            station_data = self.coordinator.data["charging_station_details"].get(
-                str(serial)
+            location_data = self.coordinator.data["mqtt_locations"].get(
+                entry_loc_id, {}
             )
-            if station_data:
-                for module in station_data.get("modules", []):
-                    if "carCharger" in module and module["carCharger"]:
-                        live_p = module["carCharger"].get("livePower")
-                        if live_p is not None:
-                            raw_watts = float(live_p)
-                            break
+            mqtt_data = location_data.get("power")
+
+            if isinstance(mqtt_data, dict) and "activePowerData" in mqtt_data:
+                power_array = mqtt_data.get("activePowerData")
+                if isinstance(power_array, list) and len(power_array) >= 3:
+                    raw_watts = float(sum(power_array[:3]))
 
         if raw_watts is None:
             data = self.smart_device_data
             if data:
                 raw_watts = float(data.get("livePower", 0.0))
 
-        if raw_watts is not None:
-            return round(raw_watts / 1000.0, 2)
-
-        return 0.00
+        return round(raw_watts / 1000.0, 2) if raw_watts is not None else 0.00
 
 
 class SmappeeMaxCurrentLimitSensor(SmappeeBaseEntity, SensorEntity):
@@ -421,18 +407,11 @@ class SmappeeMaxCurrentLimitSensor(SmappeeBaseEntity, SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_suggested_display_precision = 0
+    _attr_icon = "mdi:current-ac"
 
     def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
         """Initialize the Smappee max current limit sensor."""
-        super().__init__(
-            coordinator,
-            client,
-            entry_title,
-            device_id=device_id,
-            device_type="charger",
-            platform_domain="sensor",
-        )
+        super().__init__(coordinator, client, entry_title, device_id=device_id)
 
     @property
     def unique_id(self) -> str:
@@ -441,21 +420,19 @@ class SmappeeMaxCurrentLimitSensor(SmappeeBaseEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Extract the static max target capacity limits from configurations."""
+        """Extract maximum configuration thresholds safely from structured registry lists."""
         data = self.smart_device_data
         if not data:
             return None
-
-        config_props = data.get("configurationProperties", [])
-        for prop in config_props:
-            spec = prop.get("spec", {})
+        for prop in data.get("configurationProperties", []):
             if (
-                spec.get("name")
+                prop.get("spec", {}).get("name")
                 == "etc.smart.device.type.car.charger.config.max.current"
             ):
-                values = prop.get("values", [{}])
-                if values:
-                    return values[0].get("Quantity", {}).get("value")
+                with suppress(IndexError, KeyError, TypeError):
+                    return float(
+                        prop.get("values", [{}])[0].get("Quantity", {}).get("value")
+                    )
         return None
 
 
@@ -465,17 +442,7 @@ class SmappeeSessionDurationSensor(SmappeeBaseSessionSensor):
     _attr_translation_key = "session_duration"
     _attr_native_unit_of_measurement = UnitOfTime.MINUTES
     _attr_state_class = SensorStateClass.MEASUREMENT
-
-    def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
-        """Initialize the Smappee session duration sensor."""
-        super().__init__(
-            coordinator,
-            client,
-            entry_title,
-            device_id=device_id,
-            device_type="charger",
-            platform_domain="sensor",
-        )
+    _attr_icon = "mdi:clock-outline"
 
     @property
     def unique_id(self) -> str:
@@ -484,39 +451,23 @@ class SmappeeSessionDurationSensor(SmappeeBaseSessionSensor):
 
     @property
     def native_value(self) -> float:
-        """Compute active session timestamps into net minutes elapsed."""
+        """Compute running running session timestamps out to elapsed delta minutes."""
         session = self.active_session_data
-        if not session:
+        if not session or not session.get("from"):
             return 0.0
-
-        start_ts = session.get("from")
-        if not start_ts:
-            return 0.0
-
         try:
-            start_time = datetime.fromtimestamp(start_ts / 1000.0, tz=timezone.utc)
-            end_ts = session.get("to")
-
-            if end_ts:
-                end_time = datetime.fromtimestamp(end_ts / 1000.0, tz=timezone.utc)
-                duration = end_time - start_time
-            else:
-                now = datetime.now(timezone.utc)
-                duration = now - start_time
-
-            return round(duration.total_seconds() / 60.0, 1)
-        except Exception as err:
-            _LOGGER.error(
-                "Failed calculating session tracking boundaries for %s: %s",
-                self.device_id,
-                err,
+            start_time = datetime.fromtimestamp(
+                session["from"] / 1000.0, tz=timezone.utc
             )
+            end_ts = session.get("to")
+            end_time = (
+                datetime.fromtimestamp(end_ts / 1000.0, tz=timezone.utc)
+                if end_ts
+                else datetime.now(timezone.utc)
+            )
+            return round((end_time - start_time).total_seconds() / 60.0, 1)
+        except Exception:
             return 0.0
-
-    @property
-    def icon(self) -> str:
-        """Return the clock icon placeholder for timeline elements."""
-        return "mdi:clock-outline"
 
 
 class SmappeeSessionEnergySensor(SmappeeBaseSessionSensor):
@@ -526,18 +477,7 @@ class SmappeeSessionEnergySensor(SmappeeBaseSessionSensor):
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-    _attr_suggested_display_precision = 2
-
-    def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
-        """Initialize the Smappee session energy sensor."""
-        super().__init__(
-            coordinator,
-            client,
-            entry_title,
-            device_id=device_id,
-            device_type="charger",
-            platform_domain="sensor",
-        )
+    _attr_icon = "mdi:lightning-bolt"
 
     @property
     def unique_id(self) -> str:
@@ -546,42 +486,15 @@ class SmappeeSessionEnergySensor(SmappeeBaseSessionSensor):
 
     @property
     def native_value(self) -> float:
-        """Retrieve the aggregate electrical charge consumption total."""
-        energy = self.active_session_data.get("energy", 0.0)
-        return round(float(energy), 2)
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Extract historical context values dynamically out of active session footprints."""
-        if not self.active_session_data:
-            return None
-
-        attributes = dict(self.active_session_data)
-
-        attributes.pop("energy", None)
-        attributes.pop("controller", None)
-        attributes.pop("station", None)
-        attributes.pop("address", None)
-        attributes.pop("updateChannels", None)
-
-        return attributes
+        """Return the current energy consumption for the active session."""
+        return round(float(self.active_session_data.get("energy", 0.0)), 2)
 
 
 class SmappeeSessionRfidSensor(SmappeeBaseSessionSensor):
     """Track the identifier token credentials matching authenticated authorizations."""
 
     _attr_translation_key = "session_rfid"
-
-    def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
-        """Initialize the Smappee session RFID sensor."""
-        super().__init__(
-            coordinator,
-            client,
-            entry_title,
-            device_id=device_id,
-            device_type="charger",
-            platform_domain="sensor",
-        )
+    _attr_icon = "mdi:card-account-details"
 
     @property
     def unique_id(self) -> str:
@@ -590,41 +503,83 @@ class SmappeeSessionRfidSensor(SmappeeBaseSessionSensor):
 
     @property
     def native_value(self) -> Any:
-        """Return the signature key identification assigned to transactions."""
+        """Return the authenticated RFID tag value for the active session."""
         return self.active_session_data.get("rfid")
 
-    @property
-    def icon(self) -> str:
-        """Return an active smart badge card identification graphic icon."""
-        return "mdi:card-account-details"
 
-
-class SmappeeEnergySensor(
+class SmappeeMatrixSensor(
     CoordinatorEntity[SmappeeDataUpdateCoordinator], SensorEntity
 ):
-    """Sensor that extracts total accumulated active energy from sequential dense MQTT array streams."""
+    """Sensor that extracts variables (Energy/Power) dynamically from sequential MQTT array streams."""
 
-    _attr_device_class = SensorDeviceClass.ENERGY
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_has_entity_name = True
 
-    # Centraliseren van de metadata per type sensor
-    TYPE_METADATA: dict[str, dict[str, str]] = {
+    TYPE_METADATA: dict[str, dict[str, Any]] = {
         "grid": {
             "key": "grid_import_energy",
             "icon": "mdi:transmission-tower",
-            "fallback_device_id": "grid",
+            "device_class": SensorDeviceClass.ENERGY,
+            "state_class": SensorStateClass.TOTAL_INCREASING,
+            "unit": UnitOfEnergy.KILO_WATT_HOUR,
+            "scale_factor": 1000.0,
+            "precision": 3,
+            "map_key": "grid",
+            "fallback_array_key": "importActiveEnergyData",
         },
         "pv": {
             "key": "solar_production_energy",
             "icon": "mdi:solar-power",
-            "fallback_device_id": "pv",
+            "device_class": SensorDeviceClass.ENERGY,
+            "state_class": SensorStateClass.TOTAL_INCREASING,
+            "unit": UnitOfEnergy.KILO_WATT_HOUR,
+            "scale_factor": 1000.0,
+            "precision": 3,
+            "map_key": "pv",
+            "fallback_array_key": "importActiveEnergyData",
         },
         "car": {
             "key": "charger_matrix_energy",
             "icon": "mdi:ev-station",
-            "fallback_device_id": "charger",
+            "device_class": SensorDeviceClass.ENERGY,
+            "state_class": SensorStateClass.TOTAL_INCREASING,
+            "unit": UnitOfEnergy.KILO_WATT_HOUR,
+            "scale_factor": 1000.0,
+            "precision": 3,
+            "map_key": "cars",
+            "fallback_array_key": "importActiveEnergyData",
+        },
+        "grid_power": {
+            "key": "grid_active_power",
+            "icon": "mdi:transmission-tower-export",
+            "device_class": SensorDeviceClass.POWER,
+            "state_class": SensorStateClass.MEASUREMENT,
+            "unit": UnitOfPower.KILO_WATT,
+            "scale_factor": 1000.0,
+            "precision": 2,
+            "map_key": "grid",
+            "fallback_array_key": "activePowerData",
+        },
+        "pv_power": {
+            "key": "solar_active_power",
+            "icon": "mdi:solar-power-variant",
+            "device_class": SensorDeviceClass.POWER,
+            "state_class": SensorStateClass.MEASUREMENT,
+            "unit": UnitOfPower.KILO_WATT,
+            "scale_factor": 1000.0,
+            "precision": 2,
+            "map_key": "pv",
+            "fallback_array_key": "activePowerData",
+        },
+        "car_power": {
+            "key": "charger_matrix_power",
+            "icon": "mdi:ev-station",
+            "device_class": SensorDeviceClass.POWER,
+            "state_class": SensorStateClass.MEASUREMENT,
+            "unit": UnitOfPower.KILO_WATT,
+            "scale_factor": 1000.0,
+            "precision": 2,
+            "map_key": "cars",
+            "fallback_array_key": "activePowerData",
         },
     }
 
@@ -633,94 +588,208 @@ class SmappeeEnergySensor(
         coordinator: SmappeeDataUpdateCoordinator,
         entry: ConfigEntry,
         sensor_type: str,
+        mapped_location_id: str,
         car_uuid: str | None = None,
     ) -> None:
-        """Initialize the energy sensor with complete dynamic topology context alignment."""
+        """Initialize the flexible matrix multi-sensor platform layout."""
         super().__init__(coordinator)
-        self.sensor_type = sensor_type  # "grid", "pv", or "car"
+        self.sensor_type = sensor_type
         self.car_uuid = car_uuid
+        self.mapped_location_id = str(mapped_location_id)
         self._entry_id = entry.entry_id
 
-        # 1. Resolve metadata schemas
-        metadata = self.TYPE_METADATA.get(
+        self.metadata = self.TYPE_METADATA.get(
             sensor_type,
             {
-                "key": "matrix_energy",
+                "key": "matrix_sensor",
                 "icon": "mdi:flash",
-                "fallback_device_id": "energy",
+                "device_class": None,
+                "state_class": SensorStateClass.MEASUREMENT,
+                "unit": None,
+                "scale_factor": 1.0,
+                "precision": 2,
+                "map_key": "grid",
+                "fallback_array_key": "activePowerData",
             },
         )
-        self._attr_translation_key = metadata["key"]
-        self._attr_icon = metadata["icon"]
 
-        # 2. Assign the localized device_id string for naming conventions
-        if sensor_type == "car" and car_uuid:
-            self.device_id = car_uuid
+        self._attr_translation_key = self.metadata["key"]
+        self._attr_icon = self.metadata["icon"]
+        self._attr_device_class = self.metadata["device_class"]
+        self._attr_state_class = self.metadata["state_class"]
+        self._attr_native_unit_of_measurement = self.metadata["unit"]
+        self._attr_suggested_display_precision = self.metadata["precision"]
+
+        entry_loc_id = str(entry.data.get("station_id"))
+
+        # Clean validation context mapping layout using custom location tokens
+        if self.mapped_location_id != entry_loc_id:
+            # P1 Smart Meter Hub Context -> Map to main service location hub registry device
+            self.device_id = f"location_{self.mapped_location_id}"
+            self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, self.device_id)})
         else:
-            self.device_id = metadata["fallback_device_id"]
-
-        # 3. Dynamic Device Registry Linkage (Gateway vs. Local Charger)
-        if sensor_type in ("grid", "pv"):
-            # Fetch the dynamically discovered parent ID from the coordinator state.
-            # Fall back to config entry data if the initial collection loop is stepping.
-            parent_id = coordinator.parent_location_id or entry.data.get("station_id")
-
-            self._attr_device_info = DeviceInfo(
-                identifiers={(DOMAIN, f"location_{parent_id}")}
-            )
-        else:
-            # The individual vehicle connection loops belong to the specific hardware chassis serial
+            # EV Wall Charger Context -> Map directly to physical charger device serial
             station_serial = entry.data.get("serial") or getattr(
                 coordinator.client, "charging_station_serial", "unknown_charger"
             )
+            self.device_id = (
+                car_uuid if car_uuid else f"location_{self.mapped_location_id}"
+            )
             self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, station_serial)})
 
-        # 4. Generate unique identity paths
-        self._attr_unique_id = f"{self.device_id}_{metadata['key']}"
-
-        # 5. Build structured entity paths
+        self._attr_unique_id = f"{self.device_id}_{self.metadata['key']}"
         device_key = self.device_id.lower().replace("-", "_")
-        self.entity_id = f"sensor.{DOMAIN}_{device_key}_{metadata['key']}"
+        self.entity_id = f"sensor.{DOMAIN}_{device_key}_{self.metadata['key']}"
 
     @property
-    def native_value(self) -> float | None:
-        """Fetch the current aggregated energy value using the dynamic map rank index."""
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the state attributes containing per-phase breakdowns."""
         if not self.coordinator.data or not self.coordinator.power_mapping:
             return None
 
-        # CORRECTION: Look into 'mqtt_power_data' layout framework mapped from __init__.py
-        mqtt_data = self.coordinator.data.get("mqtt_power_data")
-        _LOGGER.critical(mqtt_data)
+        mqtt_locations = self.coordinator.data.get("mqtt_locations", {})
+        location_data = mqtt_locations.get(self.mapped_location_id, {})
+        mqtt_data = location_data.get("power")
+
         if not isinstance(mqtt_data, dict):
             return None
 
-        energy_array = mqtt_data.get("importActiveEnergyData")
-        if not isinstance(energy_array, list):
+        map_key = self.metadata["map_key"]
+        if map_key in ("grid", "pv"):
+            loc_map = self.coordinator.power_mapping.get(map_key, {})
+            energy_indices = loc_map.get("energy", [])
+            target_array_key = loc_map.get(
+                "array_key", self.metadata["fallback_array_key"]
+            )
+        elif map_key == "cars":
+            car_map = (
+                self.coordinator.power_mapping["cars"].get("charger", {})
+                if not self.car_uuid
+                else self.coordinator.power_mapping["cars"].get(self.car_uuid, {})
+            )
+            energy_indices = car_map.get("energy", [])
+            target_array_key = car_map.get("array_key", "activePowerData")
+        else:
+            return None
+
+        if "power" in self.sensor_type:
+            target_array_key = "activePowerData"
+            test_array = mqtt_data.get(target_array_key, [])
+            if isinstance(test_array, list) and len(test_array) <= 6:
+                energy_indices = list(range(len(test_array)))
+
+        target_array = mqtt_data.get(target_array_key)
+        if not isinstance(target_array, list) or not energy_indices:
+            return None
+
+        attributes = {}
+        phase_labels = ["phase_a", "phase_b", "phase_c"]
+        scale = self.metadata["scale_factor"]
+        precision = self.metadata["precision"]
+
+        try:
+            for i, index in enumerate(energy_indices):
+                if i < len(phase_labels) and 0 <= index < len(target_array):
+                    raw_val = float(target_array[index])
+                    attributes[phase_labels[i]] = round(raw_val / scale, precision)
+
+            attributes["service_location_id"] = self.mapped_location_id
+            attributes["mqtt_array_key"] = target_array_key
+
+            return attributes
+        except (ValueError, TypeError, IndexError):
+            return None
+
+    @property
+    def native_value(self) -> float | None:
+        """Extract and aggregate index positions dynamically by parsing the live JSON structure."""
+        if not self.coordinator.data:
+            return None
+
+        mqtt_locations = self.coordinator.data.get("mqtt_locations", {})
+        location_data = mqtt_locations.get(self.mapped_location_id, {})
+        mqtt_data = location_data.get("power")
+
+        if not isinstance(mqtt_data, dict):
+            return None
+
+        config_payload = self.coordinator.high_level_configs.get(
+            self.mapped_location_id
+        )
+        if not config_payload:
+            return None
+
+        measurements = (
+            config_payload
+            if isinstance(config_payload, list)
+            else config_payload.get("measurements", [])
+        )
+        target_channel_block = None
+
+        for meas in measurements:
+            mtype = str(meas.get("type", "")).upper()
+
+            if self.sensor_type in ("grid", "grid_power") and mtype == "GRID":
+                target_channel_block = meas.get("updateChannels", {})
+                break
+            elif self.sensor_type in ("pv", "pv_power") and mtype == "PRODUCTION":
+                target_channel_block = meas.get("updateChannels", {})
+                break
+            elif self.sensor_type in ("car", "car_power") and mtype == "APPLIANCE":
+                # JSON Target Match: Validate if the nested configuration module matches a CAR_CHARGER profile
+                if meas.get("appliance", {}).get("type") == "CAR_CHARGER":
+                    target_channel_block = meas.get("updateChannels", {})
+                    break
+
+        if not target_channel_block:
+            return None
+
+        is_power_sensor = "power" in self.sensor_type
+        channel_type = "activePower" if is_power_sensor else "meterReadings"
+
+        if channel_type not in target_channel_block and not is_power_sensor:
+            channel_type = "activePower"
+
+        channel_cfg = target_channel_block.get(channel_type, {})
+        aspect_paths = channel_cfg.get("aspectPaths") or []
+
+        dynamic_indices = []
+        dynamic_array_key = (
+            "activePowerData" if is_power_sensor else "importActiveEnergyData"
+        )
+
+        for path_obj in aspect_paths:
+            path_str = path_obj.get("path", "")
+
+            if "[" in path_str and "]" in path_str:
+                try:
+                    extracted_key = path_str.split("$")[-1].split(".")[1].split("[")[0]
+                    dynamic_array_key = extracted_key
+                    idx_str = path_str.split("[")[-1].split("]")[0]
+                    dynamic_indices.append(int(idx_str))
+                except (ValueError, IndexError, AttributeError):
+                    pass
+
+        dynamic_indices = list(set(dynamic_indices))
+
+        if is_power_sensor:
+            dynamic_array_key = "activePowerData"
+            test_array = mqtt_data.get(dynamic_array_key, [])
+            if isinstance(test_array, list) and len(test_array) <= 6:
+                dynamic_indices = list(range(len(test_array)))
+
+        target_array = mqtt_data.get(dynamic_array_key)
+        if not isinstance(target_array, list) or not dynamic_indices:
             return None
 
         try:
-            if self.sensor_type == "grid":
-                energy_indices = self.coordinator.power_mapping["grid"]["energy"]
-            elif self.sensor_type == "pv":
-                energy_indices = self.coordinator.power_mapping["pv"]["energy"]
-            elif self.sensor_type == "car" and self.car_uuid:
-                car_map = self.coordinator.power_mapping["cars"].get(self.car_uuid, {})
-                energy_indices = car_map.get("energy", [])
-            else:
-                return None
+            total_value = 0.0
+            for index in dynamic_indices:
+                if 0 <= index < len(target_array):
+                    total_value += float(target_array[index])
 
-            if not energy_indices:
-                return None
+            scale = self.metadata["scale_factor"]
+            return round(total_value / scale, self.metadata["precision"])
 
-            total_wh = 0.0
-            for index in energy_indices:
-                if 0 <= index < len(energy_array):
-                    total_wh += float(energy_array[index])
-
-            return round(total_wh / 1000.0, 3)
-
-        except (ValueError, TypeError, IndexError) as err:
-            _LOGGER.debug(
-                "Error extracting sequential energy matrix coordinates: %s", err
-            )
+        except (ValueError, TypeError, IndexError):
             return None

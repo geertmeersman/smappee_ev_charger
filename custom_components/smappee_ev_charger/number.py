@@ -1,6 +1,8 @@
 """Set up and manage Smappee Charger number entities."""
 
 import asyncio
+from contextlib import suppress
+import json
 import logging
 from typing import Any
 
@@ -381,6 +383,7 @@ class SmappeeChargePercentageSlider(SmappeeBaseEntity, NumberEntity):
             device_type="charger",
             platform_domain="number",
         )
+        self.mapped_location_id = str(coordinator.config_entry.data.get("station_id"))
 
     @property
     def unique_id(self) -> str:
@@ -390,6 +393,23 @@ class SmappeeChargePercentageSlider(SmappeeBaseEntity, NumberEntity):
     @property
     def native_value(self) -> float:
         """Return the current dynamic constraint threshold restriction setting."""
+        # 1. Primary: Evaluate state updates coming over the active WebSocket stream
+        if self.coordinator.data and "mqtt_locations" in self.coordinator.data:
+            mqtt_locations = self.coordinator.data["mqtt_locations"]
+            location_data = mqtt_locations.get(self.mapped_location_id, {})
+            mqtt_state = location_data.get("state")
+
+            if mqtt_state:
+                with suppress(Exception):
+                    mqtt_json = (
+                        mqtt_state
+                        if isinstance(mqtt_state, dict)
+                        else json.loads(mqtt_state)
+                    )
+                    if isinstance(mqtt_json, dict) and "percentageLimit" in mqtt_json:
+                        return float(mqtt_json["percentageLimit"])
+
+        # 2. Secondary Fallback: Fetch from the v11 REST Cloud API registry
         if (
             self.coordinator.data
             and "charging_station_details" in self.coordinator.data
@@ -400,10 +420,12 @@ class SmappeeChargePercentageSlider(SmappeeBaseEntity, NumberEntity):
                 if serial
                 else None
             )
+
             if station_data:
                 for module in station_data.get("modules", []):
                     if "carCharger" in module and module["carCharger"]:
                         return float(module["carCharger"].get("percentageLimit", 100.0))
+
         return 100.0
 
     async def async_set_native_value(self, value: float) -> None:
@@ -428,6 +450,8 @@ class SmappeeChargePercentageSlider(SmappeeBaseEntity, NumberEntity):
 
         if success and self.coordinator.data:
             serial = getattr(self.client, "charging_station_serial", None)
+
+            # Optimistic update: REST API structure
             if serial and "charging_station_details" in self.coordinator.data:
                 station_data = self.coordinator.data["charging_station_details"].get(
                     str(serial)
@@ -436,6 +460,15 @@ class SmappeeChargePercentageSlider(SmappeeBaseEntity, NumberEntity):
                     for module in station_data.get("modules", []):
                         if "carCharger" in module and module["carCharger"]:
                             module["carCharger"]["percentageLimit"] = int_value
+
+            # Optimistic update: Real-time MQTT stream states
+            if "mqtt_locations" in self.coordinator.data:
+                loc_data = self.coordinator.data["mqtt_locations"].setdefault(
+                    self.mapped_location_id, {}
+                )
+                state_data = loc_data.setdefault("state", {})
+                if isinstance(state_data, dict):
+                    state_data["percentageLimit"] = int_value
 
             self.coordinator.async_set_updated_data(self.coordinator.data)
             await asyncio.sleep(1.0)
