@@ -63,8 +63,6 @@ A robust custom Home Assistant integration designed to monitor and control **Sma
 
 [![Open your Home Assistant instance and open the repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg?style=flat-square)](https://my.home-assistant.io/redirect/hacs_repository/?owner=geertmeersman&repository=smappee_ev_charger&category=integration)
 
----
-
 ## Configuration
 
 1. In the Home Assistant UI, navigate to **Settings** -> **Devices & Services**.
@@ -75,16 +73,44 @@ A robust custom Home Assistant integration designed to monitor and control **Sma
    * **Password**
 5. If multiple functional service location clusters are associated with the profile account, the step flow interface will dynamically present a selector menu logging active station serial arrays. Isolate your target unit to finish setup.
 
----
-
 ## Core Optimization & Session Loop Architecture
 
 To preserve your token lifecycle limit frames and remain compliant with standard network rate-limiting metrics, this integration uses a smart split-polling logic pattern:
+
 * **Topology Registry:** Deep structural hardware module inventories, service profiles, and phase configuration maps are synchronized on a lightweight trailing frame once every hour.
 * **Asynchronous Live Stream:** High-frequency metrics (active phase telemetry, line status changes, real-time power steps) feed directly into a background WebSocket loop via secure TLS links.
 * **Dynamic Charging Loop:** When a vehicle enters an active `CHARGING` cycle, the integration boots an internal dynamic tracking short-interval loop, sweeping active session tables every 5 minutes. Upon transition out of the charging loop, a clean final transaction synchronization settlement query is executed exactly 5 seconds post-charging before entering low-frequency standby monitoring mode.
 
----
+## Automation Blueprints
+
+### Smappee: Forgot to Scan RFID Badge
+
+This repository includes an optimized automation blueprint designed to send an immediate high-priority push notification to your mobile device if a vehicle is hooked up but an authorized RFID token confirmation sweep has not been registered.
+
+#### What it does
+
+* **Standby Validation:** Monitors your Smappee charger entity configuration for the target `available` operational tracking state.
+* **Smart Delay Constraints:** Runs an adjustable slider timer (default: `5 minutes`) to allow normal plugin processing buffers.
+* **Direct Mobile App Action:** Automatically routes target notifications to your selected smartphone device via secure Home Assistant Companion app integration channels.
+
+#### Easy Import
+
+Click the button below to instantly import this blueprint directly into your local Home Assistant instance:
+
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint URL pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fgeertmeersman%2Fsmappee_ev_charger%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fsmappee_forgot_badge.yaml)
+
+#### Manual Blueprint Setup
+
+If you prefer manual configuration control over filesystem trees:
+
+1. Download the file `blueprints/automation/smappee_forgot_badge.yaml`.
+2. Move it inside your local project repository structure under:
+
+   ```bash
+   config/blueprints/automation/smappee_forgot_badge.yaml
+    ```
+
+3. Navigate to **Settings -> Automations & Scenes -> Blueprints**, click **Reload Blueprints**, and click **Create Automation**.
 
 ## Troubleshooting & Debug Logs
 
