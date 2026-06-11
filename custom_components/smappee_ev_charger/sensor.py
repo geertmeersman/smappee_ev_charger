@@ -25,6 +25,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, MANUFACTURER
+from .coordinator import SmappeeDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,13 +33,14 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up Smappee sensor entities dynamically based on discovered devices."""
+    """Set up Smappee sensor entities dynamically based on discovered devices and maps."""
     entry_data = hass.data[DOMAIN][entry.entry_id]
     client = entry_data["client"]
-    coordinator = entry_data["coordinator"]
+    coordinator: SmappeeDataUpdateCoordinator = entry_data["coordinator"]
 
-    entities = []
+    entities: list[SensorEntity] = []
 
+    # 1. Existing Logic: Dynamic smart device discovery loop
     if coordinator.data and "smart_devices" in coordinator.data:
         smart_devices = coordinator.data["smart_devices"]
 
@@ -75,20 +77,32 @@ async def async_setup_entry(
                     ]
                 )
 
+    # 2. New Logic: Sequential dense matrix energy sensors mapped from MQTT arrays
+    # Add Grid Import Energy Sensor
+    entities.append(SmappeeEnergySensor(coordinator, entry, "grid"))
+
+    # Add Solar Production Energy Sensor
+    entities.append(SmappeeEnergySensor(coordinator, entry, "pv"))
+
+    # Add individual charging station energy entities based on discovered car mapping UUIDs
+    if coordinator.power_mapping and "cars" in coordinator.power_mapping:
+        for car_uuid in coordinator.power_mapping["cars"]:
+            entities.append(SmappeeEnergySensor(coordinator, entry, "car", car_uuid))
+
     if entities:
         async_add_entities(entities)
 
 
-class SmappeeBaseEntity(CoordinatorEntity):
+class SmappeeBaseEntity(CoordinatorEntity[SmappeeDataUpdateCoordinator]):
     """Provide a common base entity class for all Smappee device-linked tracking entities."""
 
     _attr_has_entity_name = True
 
     def __init__(
         self,
-        coordinator,
-        client,
-        entry_title,
+        coordinator: SmappeeDataUpdateCoordinator,
+        client: Any,
+        entry_title: str,
         device_id: str,
         device_type: str = "charger",
         platform_domain: str = "sensor",
@@ -233,7 +247,6 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
     @property
     def native_value(self) -> str:
         """Determine the current active station operational status string."""
-        # 1. Primary: Evaluate real-time push data from Smappee Cloud MQTT WebSocket streams
         if self.coordinator.data and "mqtt_charging_state" in self.coordinator.data:
             mqtt_payload = self.coordinator.data["mqtt_charging_state"]
             try:
@@ -250,7 +263,6 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
                 if len(str(mqtt_payload)) <= 255:
                     return str(mqtt_payload).lower()
 
-        # 2. Secondary: Extract status values from rich v11 cached response blocks
         if (
             self.coordinator.data
             and "charging_station_details" in self.coordinator.data
@@ -275,7 +287,6 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
                         if rest_conn:
                             return str(rest_conn).lower()
 
-        # 3. Fallback: Parse the generic flat v10 smart devices configuration registry
         data = self.smart_device_data
         if data:
             if "chargingState" in data and data.get("chargingState") is not None:
@@ -368,14 +379,12 @@ class SmappeeLivePowerSensor(SmappeeBaseEntity, SensorEntity):
         """Calculate active phase telemetry power values and convert them to kilowatts."""
         raw_watts = None
 
-        # 1. Primary: Evaluate cumulative active power values across streaming phase structures
         if self.coordinator.data and "mqtt_power_data" in self.coordinator.data:
             mqtt_data = self.coordinator.data["mqtt_power_data"]
             if isinstance(mqtt_data, dict) and "activePowerData" in mqtt_data:
                 with suppress(TypeError, ValueError):
                     raw_watts = float(sum(mqtt_data["activePowerData"]))
 
-        # 2. Secondary: Extract the baseline values from cached module responses if streaming is offline
         if (
             raw_watts is None
             and self.coordinator.data
@@ -393,7 +402,6 @@ class SmappeeLivePowerSensor(SmappeeBaseEntity, SensorEntity):
                             raw_watts = float(live_p)
                             break
 
-        # 3. Fallback: Query older flat static entity attribute fields
         if raw_watts is None:
             data = self.smart_device_data
             if data:
@@ -550,7 +558,6 @@ class SmappeeSessionEnergySensor(SmappeeBaseSessionSensor):
 
         attributes = dict(self.active_session_data)
 
-        # Remove primary sensor statistics and bulky infrastructure nesting parameters
         attributes.pop("energy", None)
         attributes.pop("controller", None)
         attributes.pop("station", None)
@@ -590,3 +597,130 @@ class SmappeeSessionRfidSensor(SmappeeBaseSessionSensor):
     def icon(self) -> str:
         """Return an active smart badge card identification graphic icon."""
         return "mdi:card-account-details"
+
+
+class SmappeeEnergySensor(
+    CoordinatorEntity[SmappeeDataUpdateCoordinator], SensorEntity
+):
+    """Sensor that extracts total accumulated active energy from sequential dense MQTT array streams."""
+
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_has_entity_name = True
+
+    # Centraliseren van de metadata per type sensor
+    TYPE_METADATA: dict[str, dict[str, str]] = {
+        "grid": {
+            "key": "grid_import_energy",
+            "icon": "mdi:transmission-tower",
+            "fallback_device_id": "grid",
+        },
+        "pv": {
+            "key": "solar_production_energy",
+            "icon": "mdi:solar-power",
+            "fallback_device_id": "pv",
+        },
+        "car": {
+            "key": "charger_matrix_energy",
+            "icon": "mdi:ev-station",
+            "fallback_device_id": "charger",
+        },
+    }
+
+    def __init__(
+        self,
+        coordinator: SmappeeDataUpdateCoordinator,
+        entry: ConfigEntry,
+        sensor_type: str,
+        car_uuid: str | None = None,
+    ) -> None:
+        """Initialize the energy sensor with complete dynamic topology context alignment."""
+        super().__init__(coordinator)
+        self.sensor_type = sensor_type  # "grid", "pv", or "car"
+        self.car_uuid = car_uuid
+        self._entry_id = entry.entry_id
+
+        # 1. Resolve metadata schemas
+        metadata = self.TYPE_METADATA.get(
+            sensor_type,
+            {
+                "key": "matrix_energy",
+                "icon": "mdi:flash",
+                "fallback_device_id": "energy",
+            },
+        )
+        self._attr_translation_key = metadata["key"]
+        self._attr_icon = metadata["icon"]
+
+        # 2. Assign the localized device_id string for naming conventions
+        if sensor_type == "car" and car_uuid:
+            self.device_id = car_uuid
+        else:
+            self.device_id = metadata["fallback_device_id"]
+
+        # 3. Dynamic Device Registry Linkage (Gateway vs. Local Charger)
+        if sensor_type in ("grid", "pv"):
+            # Fetch the dynamically discovered parent ID from the coordinator state.
+            # Fall back to config entry data if the initial collection loop is stepping.
+            parent_id = coordinator.parent_location_id or entry.data.get("station_id")
+
+            self._attr_device_info = DeviceInfo(
+                identifiers={(DOMAIN, f"location_{parent_id}")}
+            )
+        else:
+            # The individual vehicle connection loops belong to the specific hardware chassis serial
+            station_serial = entry.data.get("serial") or getattr(
+                coordinator.client, "charging_station_serial", "unknown_charger"
+            )
+            self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, station_serial)})
+
+        # 4. Generate unique identity paths
+        self._attr_unique_id = f"{self.device_id}_{metadata['key']}"
+
+        # 5. Build structured entity paths
+        device_key = self.device_id.lower().replace("-", "_")
+        self.entity_id = f"sensor.{DOMAIN}_{device_key}_{metadata['key']}"
+
+    @property
+    def native_value(self) -> float | None:
+        """Fetch the current aggregated energy value using the dynamic map rank index."""
+        if not self.coordinator.data or not self.coordinator.power_mapping:
+            return None
+
+        # CORRECTION: Look into 'mqtt_power_data' layout framework mapped from __init__.py
+        mqtt_data = self.coordinator.data.get("mqtt_power_data")
+        _LOGGER.critical(mqtt_data)
+        if not isinstance(mqtt_data, dict):
+            return None
+
+        energy_array = mqtt_data.get("importActiveEnergyData")
+        if not isinstance(energy_array, list):
+            return None
+
+        try:
+            if self.sensor_type == "grid":
+                energy_indices = self.coordinator.power_mapping["grid"]["energy"]
+            elif self.sensor_type == "pv":
+                energy_indices = self.coordinator.power_mapping["pv"]["energy"]
+            elif self.sensor_type == "car" and self.car_uuid:
+                car_map = self.coordinator.power_mapping["cars"].get(self.car_uuid, {})
+                energy_indices = car_map.get("energy", [])
+            else:
+                return None
+
+            if not energy_indices:
+                return None
+
+            total_wh = 0.0
+            for index in energy_indices:
+                if 0 <= index < len(energy_array):
+                    total_wh += float(energy_array[index])
+
+            return round(total_wh / 1000.0, 3)
+
+        except (ValueError, TypeError, IndexError) as err:
+            _LOGGER.debug(
+                "Error extracting sequential energy matrix coordinates: %s", err
+            )
+            return None

@@ -1,4 +1,5 @@
 """Constants voor de Smappee Custom integratie."""
+
 import json
 from pathlib import Path
 from typing import Final

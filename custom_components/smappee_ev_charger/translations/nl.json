@@ -92,6 +92,9 @@
       }
     },
     "sensor": {
+      "charger_matrix_energy": {
+        "name": "Matrix laadenergie"
+      },
       "charger_status": {
         "name": "Laadpaal status",
         "state": {
@@ -105,6 +108,9 @@
       },
       "charging_mode": {
         "name": "Laadmodus (Sensor)"
+      },
+      "grid_import_energy": {
+        "name": "Netimport energie"
       },
       "led_brightness": {
         "name": "LED helderheid"
@@ -132,6 +138,9 @@
       },
       "session_status": {
         "name": "Sessie status"
+      },
+      "solar_production_energy": {
+        "name": "Zonneproductie energie"
       }
     },
     "switch": {
