@@ -320,10 +320,10 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         pass
 
             if mtype == "GRID":
-                mapping["grid"]["energy"] = list(set(indices))
+                mapping["grid"]["energy"] = list(dict.fromkeys(indices))
                 mapping["grid"]["array_key"] = array_source
             elif mtype == "PRODUCTION":
-                mapping["pv"]["energy"] = list(set(indices))
+                mapping["pv"]["energy"] = list(dict.fromkeys(indices))
                 mapping["pv"]["array_key"] = array_source
             elif (
                 mtype == "APPLIANCE"
@@ -334,7 +334,7 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                 meas_id = str(meas.get("id", "charger"))
                 mapping["cars"][meas_id] = {
-                    "energy": list(set(indices)),
+                    "energy": list(dict.fromkeys(indices)),
                     "array_key": array_source,
                 }
 
