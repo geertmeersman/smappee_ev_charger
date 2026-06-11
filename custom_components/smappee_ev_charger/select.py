@@ -92,14 +92,14 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
                     ).upper()
 
                     if charging_mode in ("NORMAL", "STANDARD"):
-                        return "STANDARD"
+                        return "standard"
                     if (
                         charging_mode == "SMART"
                         and optimization_strategy == "EXCESS_ONLY"
                     ):
-                        return "SOLAR"
+                        return "solar"
                     if charging_mode == "SMART":
-                        return "SMART"
+                        return "smart"
             except Exception:
                 pass
 
@@ -122,17 +122,17 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
                         charging_mode = str(cc_data.get("chargingMode", "")).upper()
                         optimization_strategy = str(
                             cc_data.get("optimizationStrategy", "")
-                        ).upper()
+                        ).lower()
 
                         if charging_mode in ("STANDARD", "NORMAL"):
-                            return "STANDARD"
+                            return "standard"
                         if (
                             charging_mode == "SMART"
                             and optimization_strategy == "EXCESS_ONLY"
                         ):
-                            return "SOLAR"
+                            return "solar"
                         if charging_mode == "SMART":
-                            return "SMART"
+                            return "smart"
 
         # 3. Fallback: Parse parameter records stored across generic flat v10 dictionary arrays
         data = self.smart_device_data
@@ -144,11 +144,11 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
             ).upper()
 
             if charging_mode in ("NORMAL", "STANDARD"):
-                return "STANDARD"
+                return "standard"
             if charging_mode == "SMART" and optimization_strategy == "EXCESS_ONLY":
-                return "SOLAR"
+                return "solar"
             if charging_mode == "SMART":
-                return "SMART"
+                return "smart"
 
         return None
 
