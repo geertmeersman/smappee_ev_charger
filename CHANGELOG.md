@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.1.0](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.1.0) (2026-06-11)
+
+[Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.0.1...v0.1.0)
+
+**Merged pull requests:**
+
+- feat: update icon for Smappee EV charger [\#3](https://github.com/geertmeersman/smappee_ev_charger/pull/3) ([geertmeersman](https://github.com/geertmeersman))
+- docs: add automation blueprint for RFID badge notification [\#2](https://github.com/geertmeersman/smappee_ev_charger/pull/2) ([geertmeersman](https://github.com/geertmeersman))
+- feat: add automation blueprint for RFID badge notification [\#1](https://github.com/geertmeersman/smappee_ev_charger/pull/1) ([geertmeersman](https://github.com/geertmeersman))
+
 ## [v0.0.1](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.0.1) (2026-06-11)
 
 [Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.0.0...v0.0.1)
