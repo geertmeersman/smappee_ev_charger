@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.1.1](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.1.1) (2026-06-11)
+
+[Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.1.0...v0.1.1)
+
+**Merged pull requests:**
+
+- fix: enhance notification system for RFID badge reminder [\#4](https://github.com/geertmeersman/smappee_ev_charger/pull/4) ([geertmeersman](https://github.com/geertmeersman))
+
 ## [v0.1.0](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.1.0) (2026-06-11)
 
 [Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.0.1...v0.1.0)
