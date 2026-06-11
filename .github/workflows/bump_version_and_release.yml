@@ -106,3 +106,7 @@ jobs:
           done
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  trigger-sync:
+    needs: release
+    uses: ./.github/workflows/sync.yml # Path to your sync workflow file
+    secrets: inherit
