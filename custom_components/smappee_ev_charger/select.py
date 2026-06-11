@@ -1,6 +1,7 @@
 """Set up and manage Smappee Charger select entities."""
 
 import asyncio
+from contextlib import suppress
 import json
 import logging
 
@@ -33,7 +34,6 @@ async def async_setup_entry(
             category = device.get("type", {}).get("category")
             device_id = device.get("id")
 
-            # Create selector configuration panels exclusively for CARCHARGER devices
             if category == "CARCHARGER" and device_id:
                 _LOGGER.debug(
                     "Dynamically creating select dropdown entities for Smappee charger: %s",
@@ -55,7 +55,7 @@ async def async_setup_entry(
 
 
 class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
-    """Manage dropdown control panels handling smart load balancing behaviors (STANDARD, SMART, SOLAR)."""
+    """Manage dropdown control panels handling smart load balancing behaviors (standard, smart, solar)."""
 
     _attr_translation_key = "charging_mode_select"
     _attr_entity_category = EntityCategory.CONFIG
@@ -71,6 +71,7 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
             platform_domain="select",
         )
         self._attr_options = ["standard", "smart", "solar"]
+        self.mapped_location_id = str(coordinator.config_entry.data.get("station_id"))
 
     @property
     def unique_id(self) -> str:
@@ -80,38 +81,36 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Return the active matching profile translation parsed from MQTT or rich REST structures."""
-        # 1. Primary: Evaluate state updates coming over the active WebSocket stream
-        if self.coordinator.data and "mqtt_charging_state" in self.coordinator.data:
-            mqtt_payload = self.coordinator.data["mqtt_charging_state"]
-            try:
-                mqtt_json = json.loads(mqtt_payload)
-                if isinstance(mqtt_json, dict):
-                    charging_mode = str(mqtt_json.get("chargingMode", "")).upper()
-                    optimization_strategy = str(
-                        mqtt_json.get("optimizationStrategy", "")
-                    ).upper()
+        # 1. Primary: Evaluate multi-location partitioned state updates coming over real-time streams
+        if self.coordinator.data and "mqtt_locations" in self.coordinator.data:
+            mqtt_locations = self.coordinator.data["mqtt_locations"]
+            location_data = mqtt_locations.get(self.mapped_location_id, {})
+            mqtt_state = location_data.get("state")
 
-                    if charging_mode in ("NORMAL", "STANDARD"):
-                        return "standard"
-                    if (
-                        charging_mode == "SMART"
-                        and optimization_strategy == "EXCESS_ONLY"
-                    ):
-                        return "solar"
-                    if charging_mode == "SMART":
-                        return "smart"
-            except json.JSONDecodeError as err:
-                _LOGGER.debug(
-                    "Failed to decode real-time MQTT payload for charging mode select: %s",
-                    err,
-                )
-            except Exception as err:
-                _LOGGER.error(
-                    "Unexpected error processing live charging mode select state: %s",
-                    err,
-                )
+            if mqtt_state:
+                with suppress(Exception):
+                    mqtt_json = (
+                        mqtt_state
+                        if isinstance(mqtt_state, dict)
+                        else json.loads(mqtt_state)
+                    )
+                    if isinstance(mqtt_json, dict):
+                        charging_mode = str(mqtt_json.get("chargingMode", "")).upper()
+                        optimization_strategy = str(
+                            mqtt_json.get("optimizationStrategy", "")
+                        ).upper()
 
-        # 2. Secondary: Extract attributes from cached v11 configuration detail maps
+                        if charging_mode in ("NORMAL", "STANDARD"):
+                            return "standard"
+                        if (
+                            charging_mode == "SMART"
+                            and optimization_strategy == "EXCESS_ONLY"
+                        ):
+                            return "solar"
+                        if charging_mode == "SMART":
+                            return "smart"
+
+        # 2. Secondary Fallback: Extract attributes from cached v11 station detail maps
         if (
             self.coordinator.data
             and "charging_station_details" in self.coordinator.data
@@ -130,7 +129,7 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
                         charging_mode = str(cc_data.get("chargingMode", "")).upper()
                         optimization_strategy = str(
                             cc_data.get("optimizationStrategy", "")
-                        ).lower()
+                        ).upper()
 
                         if charging_mode in ("STANDARD", "NORMAL"):
                             return "standard"
@@ -142,9 +141,24 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
                         if charging_mode == "SMART":
                             return "smart"
 
-        # 3. Fallback: Parse parameter records stored across generic flat v10 dictionary arrays
+        # 3. Tertiary Fallback: Deep safe inspection of nested v10 smart device records
         data = self.smart_device_data
         if data:
+            car_charger = data.get("carCharger")
+            if isinstance(car_charger, dict):
+                charging_mode = str(car_charger.get("chargingMode", "")).upper()
+                optimization_strategy = str(
+                    car_charger.get("optimizationStrategy", "")
+                ).upper()
+
+                if charging_mode in ("NORMAL", "STANDARD"):
+                    return "standard"
+                if charging_mode == "SMART" and optimization_strategy == "EXCESS_ONLY":
+                    return "solar"
+                if charging_mode == "SMART":
+                    return "smart"
+
+            # Legacy backup if parameters are found at top level in alternative firmware scopes
             charging_mode = str(data.get("chargingMode", "")).upper()
             load_management = data.get("loadManagement", {})
             optimization_strategy = str(
@@ -187,25 +201,34 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
         if success:
             if self.coordinator.data:
                 serial = getattr(self.client, "charging_station_serial", None)
-                api_mode = "SMART" if option in ("SMART", "SOLAR") else "STANDARD"
-                api_strategy = "EXCESS_ONLY" if option == "SOLAR" else "BALANCED"
+                api_mode = "SMART" if option in ("smart", "solar") else "STANDARD"
+                api_strategy = "EXCESS_ONLY" if option == "solar" else "BALANCED"
 
-                # Update multi-layer cache structure optimistic parameters
+                # Optimistic UI caching updates: v11 station structures
                 if serial and "charging_station_details" in self.coordinator.data:
                     station_data = self.coordinator.data[
                         "charging_station_details"
                     ].get(str(serial))
                     if station_data:
                         for module in station_data.get("modules", []):
-                            if "carCharger" in module:
+                            if "carCharger" in module and module["carCharger"]:
                                 module["carCharger"]["chargingMode"] = api_mode
                                 module["carCharger"][
                                     "optimizationStrategy"
                                 ] = api_strategy
 
+                # Optimistic UI caching updates: v10 smart device records
                 if "smart_devices" in self.coordinator.data:
                     for device in self.coordinator.data["smart_devices"]:
                         if device.get("id") == self.device_id:
+                            if "carCharger" in device and isinstance(
+                                device["carCharger"], dict
+                            ):
+                                device["carCharger"]["chargingMode"] = api_mode
+                                device["carCharger"][
+                                    "optimizationStrategy"
+                                ] = api_strategy
+
                             device["chargingMode"] = api_mode
                             if "loadManagement" not in device:
                                 device["loadManagement"] = {}
@@ -213,6 +236,16 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
                                 "optimizationStrategy"
                             ] = api_strategy
                             break
+
+                # Optimistic UI caching updates: Real-time MQTT stream states
+                if "mqtt_locations" in self.coordinator.data:
+                    loc_data = self.coordinator.data["mqtt_locations"].setdefault(
+                        self.mapped_location_id, {}
+                    )
+                    state_data = loc_data.setdefault("state", {})
+                    if isinstance(state_data, dict):
+                        state_data["chargingMode"] = api_mode
+                        state_data["optimizationStrategy"] = api_strategy
 
                 self.coordinator.async_set_updated_data(self.coordinator.data)
 
@@ -223,11 +256,11 @@ class SmappeeChargingModeSelect(SmappeeBaseEntity, SelectEntity):
     def icon(self) -> str:
         """Return a custom icon matching the active operational strategy context."""
         mode = self.current_option
-        if mode == "SOLAR":
+        if mode == "solar":
             return "mdi:solar-power"
-        if mode == "SMART":
+        if mode == "smart":
             return "mdi:brain"
-        if mode == "STANDARD":
+        if mode == "standard":
             return "mdi:lightning-bolt"
         return "mdi:ev-station"
 

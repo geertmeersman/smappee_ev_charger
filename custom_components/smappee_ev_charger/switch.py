@@ -1,6 +1,7 @@
 """Set up and manage Smappee Charger switch entities."""
 
 import asyncio
+from contextlib import suppress
 import json
 import logging
 from typing import Any
@@ -34,7 +35,6 @@ async def async_setup_entry(
             category = device.get("type", {}).get("category")
             device_id = device.get("id")
 
-            # Create switch entities exclusively for CARCHARGER devices
             if category == "CARCHARGER" and device_id:
                 _LOGGER.debug(
                     "Dynamically creating switch entities for Smappee charger: %s",
@@ -73,6 +73,8 @@ class SmappeeAvailabilitySwitch(SmappeeBaseEntity, SwitchEntity):
             device_type="charger",
             platform_domain="switch",
         )
+        # Determine the unique location ID of the charger (e.g., 317443)
+        self.mapped_location_id = str(coordinator.config_entry.data.get("station_id"))
 
     @property
     def unique_id(self) -> str:
@@ -81,28 +83,43 @@ class SmappeeAvailabilitySwitch(SmappeeBaseEntity, SwitchEntity):
 
     @property
     def is_on(self) -> bool:
-        """Return True if the charger is marked available via MQTT or REST fallback."""
-        if self.coordinator.data and "mqtt_charging_state" in self.coordinator.data:
-            mqtt_payload = self.coordinator.data["mqtt_charging_state"]
-            try:
-                mqtt_json = json.loads(mqtt_payload)
-                if isinstance(mqtt_json, dict) and "available" in mqtt_json:
-                    return bool(mqtt_json["available"])
-            except json.JSONDecodeError as err:
-                _LOGGER.warning(
-                    "Failed to parse incoming MQTT payload cache for available flag: %s",
-                    err,
-                )
-            except Exception as err:
-                _LOGGER.error(
-                    "Unexpected runtime exception processing live status switch data: %s",
-                    err,
-                )
+        """Return True if the charger is marked available via the official v10 charging station details."""
+        # 1. MQTT real-time fallback partition
+        if self.coordinator.data and "mqtt_locations" in self.coordinator.data:
+            mqtt_state = (
+                self.coordinator.data["mqtt_locations"]
+                .get(self.mapped_location_id, {})
+                .get("state")
+            )
+            if mqtt_state:
+                with suppress(Exception):
+                    mqtt_json = (
+                        mqtt_state
+                        if isinstance(mqtt_state, dict)
+                        else json.loads(mqtt_state)
+                    )
+                    if isinstance(mqtt_json, dict) and "available" in mqtt_json:
+                        return bool(mqtt_json["available"])
 
+        # 2. AUTHORITATIVE FALLBACK: Verify tracking records inside charging_station_details (v10/v11 API)
+        if (
+            self.coordinator.data
+            and "charging_station_details" in self.coordinator.data
+        ):
+            serial = getattr(self.client, "charging_station_serial", None)
+            station_data = self.coordinator.data["charging_station_details"].get(
+                str(serial)
+            )
+
+            if station_data and "available" in station_data:
+                return bool(station_data["available"])
+
+        # 3. Last resort fallback payload check: Inspect general smart_devices state mapping table
         data = self.smart_device_data
-        if not data:
-            return False
-        return bool(data.get("available", False))
+        if data and "available" in data:
+            return bool(data.get("available"))
+
+        return False
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Set the charger status to available."""
@@ -117,6 +134,16 @@ class SmappeeAvailabilitySwitch(SmappeeBaseEntity, SwitchEntity):
                     if device.get("id") == self.device_id:
                         device["available"] = True
                         break
+
+                # Synchronize the localized MQTT cache dictionary directly for smooth frontend UI transitions
+                if "mqtt_locations" in self.coordinator.data:
+                    loc_data = self.coordinator.data["mqtt_locations"].setdefault(
+                        self.mapped_location_id, {}
+                    )
+                    state_data = loc_data.setdefault("state", {})
+                    if isinstance(state_data, dict):
+                        state_data["available"] = True
+
                 self.coordinator.async_set_updated_data(self.coordinator.data)
 
             await asyncio.sleep(1.5)
@@ -136,6 +163,16 @@ class SmappeeAvailabilitySwitch(SmappeeBaseEntity, SwitchEntity):
                     if device.get("id") == self.device_id:
                         device["available"] = False
                         break
+
+                # Synchronize the localized MQTT cache dictionary directly for smooth frontend UI transitions
+                if "mqtt_locations" in self.coordinator.data:
+                    loc_data = self.coordinator.data["mqtt_locations"].setdefault(
+                        self.mapped_location_id, {}
+                    )
+                    state_data = loc_data.setdefault("state", {})
+                    if isinstance(state_data, dict):
+                        state_data["available"] = False
+
                 self.coordinator.async_set_updated_data(self.coordinator.data)
 
             await asyncio.sleep(1.5)
@@ -234,7 +271,6 @@ class SmappeeOfflineChargingSwitch(SmappeeBaseEntity, SwitchEntity):
         )
 
         if success and self.coordinator.data:
-            # Sync local caches with multi-layer optimistic updates to keep UI synchronized
             if serial and "charging_station_details" in self.coordinator.data:
                 station_data = self.coordinator.data["charging_station_details"].get(
                     str(serial)
