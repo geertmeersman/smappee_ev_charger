@@ -674,9 +674,10 @@ class SmappeeMatrixSensor(
 
         if "power" in self.sensor_type:
             target_array_key = "activePowerData"
-            test_array = mqtt_data.get(target_array_key, [])
-            if isinstance(test_array, list) and len(test_array) <= 6:
-                energy_indices = list(range(len(test_array)))
+            if not energy_indices:
+                test_array = mqtt_data.get(target_array_key, [])
+                if isinstance(test_array, list) and len(test_array) <= 6:
+                    energy_indices = list(range(len(test_array)))
 
         target_array = mqtt_data.get(target_array_key)
         if not isinstance(target_array, list) or not energy_indices:
@@ -774,9 +775,10 @@ class SmappeeMatrixSensor(
 
         if is_power_sensor:
             dynamic_array_key = "activePowerData"
-            test_array = mqtt_data.get(dynamic_array_key, [])
-            if isinstance(test_array, list) and len(test_array) <= 6:
-                dynamic_indices = list(range(len(test_array)))
+            if not dynamic_indices:
+                test_array = mqtt_data.get(dynamic_array_key, [])
+                if isinstance(test_array, list) and len(test_array) <= 6:
+                    dynamic_indices = list(range(len(test_array)))
 
         target_array = mqtt_data.get(dynamic_array_key)
         if not isinstance(target_array, list) or not dynamic_indices:
