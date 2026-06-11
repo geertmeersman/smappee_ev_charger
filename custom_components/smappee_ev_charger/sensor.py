@@ -301,8 +301,12 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
                         "iec_status": mqtt_json.get("iecStatus", {}).get("current"),
                         "detailed_status": mqtt_json.get("status", {}).get("current"),
                     }
-            except Exception:
-                pass
+            except json.JSONDecodeError as err:
+                _LOGGER.debug("Failed to decode real-time MQTT payload JSON: %s", err)
+            except Exception as err:
+                _LOGGER.error(
+                    "Unexpected error parsing live telemetry sensor metrics: %s", err
+                )
         return None
 
     @property
