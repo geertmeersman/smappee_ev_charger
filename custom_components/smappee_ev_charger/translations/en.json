@@ -92,6 +92,9 @@
       }
     },
     "sensor": {
+      "charger_matrix_energy": {
+        "name": "Matrix charge energy"
+      },
       "charger_status": {
         "name": "Charger status",
         "state": {
@@ -105,6 +108,9 @@
       },
       "charging_mode": {
         "name": "Charging mode"
+      },
+      "grid_import_energy": {
+        "name": "Grid import energy"
       },
       "led_brightness": {
         "name": "LED brightness"
@@ -132,6 +138,9 @@
       },
       "session_status": {
         "name": "Session status"
+      },
+      "solar_production_energy": {
+        "name": "Solar production energy"
       }
     },
     "switch": {

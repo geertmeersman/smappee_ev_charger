@@ -489,3 +489,24 @@ class SmappeeClient:
                 err,
             )
             return False
+
+    async def get_high_level_configuration(self) -> dict[str, Any]:
+        """Fetch the explicit high-level configuration schema layout mapping parameters for raw data arrays."""
+        headers = await self.get_headers()
+        url = f"{API_BASE_URL}/{DEFAULT_API_VERSION}/servicelocation/{self.service_location_id}/highlevelconfiguration"
+
+        try:
+            async with self.session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    return await response.json()
+                _LOGGER.error(
+                    "Failed to query localized high-level tracking configuration blocks. Status: %s",
+                    response.status,
+                )
+                return {}
+        except Exception as err:
+            _LOGGER.error(
+                "Exception occurred while retrieving layout blueprint mapping constraints: %s",
+                err,
+            )
+            return {}
