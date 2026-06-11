@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.1.2](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.1.2) (2026-06-11)
+
+[Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.1.1...v0.1.2)
+
+**Merged pull requests:**
+
+- fix: improve error handling and logging for MQTT payload processing [\#5](https://github.com/geertmeersman/smappee_ev_charger/pull/5) ([geertmeersman](https://github.com/geertmeersman))
+
 ## [v0.1.1](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.1.1) (2026-06-11)
 
 [Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.1.0...v0.1.1)
