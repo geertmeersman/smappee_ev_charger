@@ -59,7 +59,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _register_parent_location_device(hass, entry, coordinator)
 
     # Connect the persistent background WebSocket MQTT stream
-    _setup_mqtt_stream(hass, entry, coordinator, client)
+    await _setup_mqtt_stream(hass, entry, coordinator, client)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -121,7 +121,7 @@ def _register_parent_location_device(
         )
 
 
-def _setup_mqtt_stream(
+async def _setup_mqtt_stream(
     hass: HomeAssistant,
     entry: ConfigEntry,
     coordinator: SmappeeDataUpdateCoordinator,
@@ -209,7 +209,7 @@ def _setup_mqtt_stream(
             transport="websockets",
         )
         mqtt_client.username_pw_set(mqtt_cfg["username"], mqtt_cfg["password"])
-        hass.async_add_executor_job(mqtt_client.tls_set)
+        await hass.async_add_executor_job(mqtt_client.tls_set)
         mqtt_client.reconnect_delay_set(min_delay=1, max_delay=120)
 
         # Functional callback factories built to block state leakage across distinct background connection scopes
