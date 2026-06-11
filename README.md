@@ -30,7 +30,6 @@ A robust custom Home Assistant integration designed to monitor and control **Sma
 [![github contributors](https://img.shields.io/github/contributors/geertmeersman/smappee_ev_charger)](https://github.com/geertmeersman/smappee_ev_charger/graphs/contributors)
 [![github commit activity](https://img.shields.io/github/commit-activity/y/geertmeersman/smappee_ev_charger?logo=github)](https://github.com/geertmeersman/smappee_ev_charger/commits/main)
 
-
 ## Features
 
 | Platform | Entity Name | Description |
@@ -41,7 +40,7 @@ A robust custom Home Assistant integration designed to monitor and control **Sma
 | | Session Energy | Continuous tracking of energy accumulated during the active charging sequence (`kWh`). |
 | | Session Duration | Dynamic tracker mapping active transaction runtime boundaries (`Minutes`). |
 | | Session RFID Token | Identifies the badge credential signature used to authenticate the current session. |
-| **Binary Sensor**| Network Status | Connectivity diagnostic mapping overall cloud framework accessibility. |
+| **Binary Sensor** | Network Status | Connectivity diagnostic mapping overall cloud framework accessibility. |
 | | Car Connected | Real-time state mapping physical EV connector engagements based on strict IEC standard state codes. |
 | **Switch** | Charger Availability | Toggles overall public validation states to lock down or open up station access. |
 | | Load Management | Activates or overrides local v11 database offline processing backup rules. |
@@ -53,7 +52,7 @@ A robust custom Home Assistant integration designed to monitor and control **Sma
 | | Phase Configuration | Adjusts line alignment phase tracking rotations using structural `PUT` instructions mapping physical building profiles. |
 | **Button** | Pause / Stop | Executes instant parameterless transaction lifecycle interactions. |
 | | Standard / Smart Modes | Single-tap overrides matching grid optimization strategies. |
-| **Device Tracker**| Charger Position | Sets static localized geographical GPS coordinates retrieved from service location maps. |
+| **Device Tracker** | Charger Position | Sets static localized geographical GPS coordinates retrieved from service location maps. |
 
 ---
 

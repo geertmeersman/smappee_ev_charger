@@ -1,6 +1,6 @@
 blueprint:
   name: "Smappee: Forgot to Scan RFID Badge"
-  description: "Send a push notification when the charger remains in the available state for too long."
+  description: "Send a push notification when the charger remains in a connected state without transaction authorization."
   domain: automation
   input:
     charger_status_sensor:
@@ -12,7 +12,7 @@ blueprint:
             - domain: sensor
     delay_time:
       name: Delay Time
-      description: How long the charger must be 'available' before sending the alert.
+      description: How long the charger must be connected before sending the alert.
       default: 5
       selector:
         number:
@@ -27,11 +27,23 @@ blueprint:
         device:
           filter:
             - integration: mobile_app
+    notification_title:
+      name: Notification Title
+      description: The title header text of the push notification message.
+      default: "⚡ Smappee: Forgot to badge?"
+      selector:
+        text:
+    notification_message:
+      name: Notification Message
+      description: "The body text of the message. Use {{ delay_minutes }} to inject the dynamic countdown value."
+      default: "The car has been connected for {{ delay_minutes }} minutes, but the charging session has not started. Don't forget to swipe your RFID card!"
+      selector:
+        text:
 
 trigger:
   - platform: state
     entity_id: !input charger_status_sensor
-    to: "available"
+    to: "cable_connected"
     for:
       minutes: !input delay_time
 
@@ -41,10 +53,9 @@ action:
   - domain: mobile_app
     type: notify
     device_id: !input notify_device
-    title: "⚡ Smappee: Forgot to badge?"
-    message: "The charger has been available for {{ delay_minutes }} minutes. Don't forget to swipe your RFID card!"
+    title: !input notification_title
+    message: !input notification_message
     data:
-      # Inject the input directly into the template variables registry block
       delay_minutes: !input delay_time
 
 mode: single
