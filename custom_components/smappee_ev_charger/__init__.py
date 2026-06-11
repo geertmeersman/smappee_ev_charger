@@ -288,13 +288,14 @@ async def _setup_mqtt_stream(
                                 "Failed calculating transient execution bounds: %s", err
                             )
 
-                    # CHANNEL B: Dense sequential matrix telemetry registers (Power, Currents, and Voltages arrays)
+                    # CHANNEL B: Dense sequential matrix telemetry registers
                     else:
                         try:
                             parsed_json = json.loads(payload)
                             if isinstance(parsed_json, dict) and (
                                 "activePowerData" in parsed_json
                                 or "importActiveEnergyData" in parsed_json
+                                or "channelData" in parsed_json
                             ):
                                 coordinator.data["mqtt_locations"][l_id][
                                     "power"
