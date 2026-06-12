@@ -283,10 +283,12 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._handle_charging_session_timers(True)
 
     def _parse_high_level_configuration(self, cfg: dict) -> dict[str, Any]:
-        """Parse explicit MQTT array element positions out of the high-level configuration payload."""
         mapping: dict[str, Any] = {
-            "grid": {"energy": [], "array_key": "activePowerData"},
-            "pv": {"energy": [], "array_key": "activePowerData"},
+            "grid": {
+                "energy": [],
+                "array_key": "importActiveEnergyData",
+            },  # Standaard naar Energy
+            "pv": {"energy": [], "array_key": "importActiveEnergyData"},
             "cars": {},
         }
 
@@ -295,23 +297,31 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             mtype = str(meas.get("type", "")).upper()
             channels = meas.get("updateChannels", {})
 
-            # Extract the raw indices using meterReadings if available, or fall back to activePower
+            # Kies de juiste bron op basis van wat we willen meten (Energy vs Power)
+            # Voor Energy sensors: geef de voorkeur aan meterReadings
             reading_source = (
                 channels.get("meterReadings") or channels.get("activePower") or {}
             )
             aspect_paths = reading_source.get("aspectPaths") or []
 
-            # Parse out the integer from strings like "$.importActiveEnergyData[0]" or "$.channelData[3]"
             indices = []
-            array_source = "activePowerData"
+            # Bepaal array_source op basis van de eerste geldige path
+            array_source = "importActiveEnergyData"  # Default voor Energy
 
             for path_obj in aspect_paths:
                 path_str = path_obj.get("path", "")
-                if "channelData" in path_str:
-                    array_source = "channelData"
-                elif "importActiveEnergyData" in path_str:
+                # Bepaal array_source specifiek voor dit type meting
+                if "importActiveEnergyData" in path_str:
                     array_source = "importActiveEnergyData"
+                    break  # Gevonden, stop met zoeken
+                elif "channelData" in path_str:
+                    array_source = "channelData"
+                elif "activePowerData" in path_str:
+                    array_source = "activePowerData"
 
+            # Parse indices
+            for path_obj in aspect_paths:
+                path_str = path_obj.get("path", "")
                 if "[" in path_str and "]" in path_str:
                     try:
                         idx_str = path_str.split("[")[-1].split("]")[0]
@@ -319,27 +329,29 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     except (ValueError, IndexError):
                         pass
 
+            clean_indices = list(dict.fromkeys(indices))
+
             if mtype == "GRID":
-                mapping["grid"]["energy"] = list(dict.fromkeys(indices))
+                mapping["grid"]["energy"] = clean_indices
                 mapping["grid"]["array_key"] = array_source
             elif mtype == "PRODUCTION":
-                mapping["pv"]["energy"] = list(dict.fromkeys(indices))
+                mapping["pv"]["energy"] = clean_indices
                 mapping["pv"]["array_key"] = array_source
             elif (
                 mtype == "APPLIANCE"
                 and meas.get("appliance", {}).get("type") == "CAR_CHARGER"
             ):
-                if not indices:
-                    indices = [0, 1, 2]  # Default fallback for 3-phase chargers
-
+                if not clean_indices:
+                    clean_indices = [0, 1, 2]
                 meas_id = str(meas.get("id", "charger"))
                 mapping["cars"][meas_id] = {
-                    "energy": list(dict.fromkeys(indices)),
+                    "energy": clean_indices,
                     "array_key": array_source,
                 }
 
-        # Hardcoded fallback safety checks if the response format is sparse
+        # Fallback
         if not mapping["grid"]["energy"]:
             mapping["grid"]["energy"] = [0, 1, 2]
+            mapping["grid"]["array_key"] = "importActiveEnergyData"
 
         return mapping

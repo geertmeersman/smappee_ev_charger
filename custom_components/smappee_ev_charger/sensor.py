@@ -103,15 +103,25 @@ async def async_setup_entry(
                 )
 
             elif loc_id_str == master_station_id:
-                _LOGGER.info(
-                    "Mounting MID CAR_CHARGER matrix sensors (Energy & Power) for location %s",
-                    loc_id_str,
+                cars_mapping = coordinator.power_mapping.get("cars", {})
+                car_uuids = list(cars_mapping.keys())
+
+                uuid = car_uuids[0] if car_uuids else None
+
+                entities.append(
+                    SmappeeMatrixSensor(
+                        coordinator, entry, "car", loc_id_str, car_uuid=uuid
+                    )
                 )
                 entities.append(
-                    SmappeeMatrixSensor(coordinator, entry, "car", loc_id_str)
+                    SmappeeMatrixSensor(
+                        coordinator, entry, "car_power", loc_id_str, car_uuid=uuid
+                    )
                 )
                 entities.append(
-                    SmappeeMatrixSensor(coordinator, entry, "car_power", loc_id_str)
+                    SmappeeMatrixSensor(
+                        coordinator, entry, "car_energy", loc_id_str, car_uuid=uuid
+                    )
                 )
 
     if entities:
@@ -547,6 +557,17 @@ class SmappeeMatrixSensor(
             "map_key": "cars",
             "fallback_array_key": "activePowerData",
         },
+        "car_energy": {
+            "key": "charger_total_energy",
+            "icon": "mdi:ev-station",
+            "device_class": SensorDeviceClass.ENERGY,
+            "state_class": SensorStateClass.TOTAL_INCREASING,
+            "unit": UnitOfEnergy.KILO_WATT_HOUR,
+            "scale_factor": 1000.0,
+            "precision": 2,
+            "map_key": "cars",
+            "fallback_array_key": "importActiveEnergyData",
+        },
     }
 
     def __init__(
@@ -702,7 +723,10 @@ class SmappeeMatrixSensor(
             elif self.sensor_type in ("pv", "pv_power") and mtype == "PRODUCTION":
                 target_channel_block = meas.get("updateChannels", {})
                 break
-            elif self.sensor_type in ("car", "car_power") and mtype == "APPLIANCE":
+            elif (
+                self.sensor_type in ("car", "car_power", "car_energy")
+                and mtype == "APPLIANCE"
+            ):
                 # JSON Target Match: Validate if the nested configuration module matches a CAR_CHARGER profile
                 if meas.get("appliance", {}).get("type") == "CAR_CHARGER":
                     target_channel_block = meas.get("updateChannels", {})
@@ -737,7 +761,15 @@ class SmappeeMatrixSensor(
                 except (ValueError, IndexError, AttributeError):
                     pass
 
-        dynamic_indices = list(set(dynamic_indices))
+        if self.sensor_type == "car_energy":
+            dynamic_indices = [0, 1, 2]
+            dynamic_array_key = "importActiveEnergyData"
+        elif not is_power_sensor and not dynamic_indices:
+            dynamic_array_key = self.metadata.get(
+                "fallback_array_key", "importActiveEnergyData"
+            )
+            _LOGGER.critical(dynamic_array_key)
+            dynamic_indices = [0, 1, 2]
 
         # 5. Shift back to flat activePowerData arrays ONLY if no specific indices were resolved
         if is_power_sensor:
