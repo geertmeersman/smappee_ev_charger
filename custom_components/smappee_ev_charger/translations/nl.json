@@ -115,9 +115,6 @@
       "led_brightness": {
         "name": "LED helderheid"
       },
-      "live_power": {
-        "name": "Live vermogen"
-      },
       "max_current_limit": {
         "name": "Maximale stroomlimiet"
       },
