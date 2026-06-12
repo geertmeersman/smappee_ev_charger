@@ -103,15 +103,20 @@ async def async_setup_entry(
                 )
 
             elif loc_id_str == master_station_id:
-                _LOGGER.info(
-                    "Mounting MID CAR_CHARGER matrix sensors (Energy & Power) for location %s",
-                    loc_id_str,
+                cars_mapping = coordinator.power_mapping.get("cars", {})
+                car_uuids = list(cars_mapping.keys())
+
+                uuid = car_uuids[0] if car_uuids else None
+
+                entities.append(
+                    SmappeeMatrixSensor(
+                        coordinator, entry, "car", loc_id_str, car_uuid=uuid
+                    )
                 )
                 entities.append(
-                    SmappeeMatrixSensor(coordinator, entry, "car", loc_id_str)
-                )
-                entities.append(
-                    SmappeeMatrixSensor(coordinator, entry, "car_power", loc_id_str)
+                    SmappeeMatrixSensor(
+                        coordinator, entry, "car_power", loc_id_str, car_uuid=uuid
+                    )
                 )
 
     if entities:
@@ -702,12 +707,14 @@ class SmappeeMatrixSensor(
             elif self.sensor_type in ("pv", "pv_power") and mtype == "PRODUCTION":
                 target_channel_block = meas.get("updateChannels", {})
                 break
-            elif self.sensor_type in ("car", "car_power") and mtype == "APPLIANCE":
+            elif (
+                self.sensor_type in ("car", "car_power", "car_energy")
+                and mtype == "APPLIANCE"
+            ):
                 # JSON Target Match: Validate if the nested configuration module matches a CAR_CHARGER profile
                 if meas.get("appliance", {}).get("type") == "CAR_CHARGER":
                     target_channel_block = meas.get("updateChannels", {})
                     break
-
         if not target_channel_block:
             return None
 
@@ -731,13 +738,16 @@ class SmappeeMatrixSensor(
             if "[" in path_str and "]" in path_str:
                 try:
                     extracted_key = path_str.split("$")[-1].split(".")[1].split("[")[0]
-                    dynamic_array_key = extracted_key
-                    idx_str = path_str.split("[")[-1].split("]")[0]
-                    dynamic_indices.append(int(idx_str))
+                    if dynamic_array_key == extracted_key:
+                        idx_str = path_str.split("[")[-1].split("]")[0]
+                        dynamic_indices.append(int(idx_str))
+
                 except (ValueError, IndexError, AttributeError):
                     pass
 
+        # Zorg dat we geen duplicaten hebben en sorteer
         dynamic_indices = list(set(dynamic_indices))
+        dynamic_indices.sort()
 
         # 5. Shift back to flat activePowerData arrays ONLY if no specific indices were resolved
         if is_power_sensor:
