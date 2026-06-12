@@ -36,9 +36,12 @@ A robust custom Home Assistant integration designed to monitor and control **Sma
 | :--- | :--- | :--- |
 | **Sensor** | Status Sensor | Displays detailed operational status (`available`, `charging`, `suspended_evse`, etc.) with real-time MQTT fallback tracking. |
 | | Live Power | Monitors real-time charging power delivery scaled cleanly in Kilowatts (`kW`). |
+| | Grid Matrix (Power & Energy) | Dynamic P1 smart hub sensors tracking real-time grid import power (`kW`) and cumulative energy (`kWh`). Includes per-phase breakdown attributes. |
+| | Solar Matrix (Power & Energy) | Dynamic sensors tracking real-time PV production power (`kW`) and cumulative energy (`kWh`). Includes per-phase breakdown attributes. |
+| | Charger Matrix (Power & Energy) | Tracks physical MID meter or dedicated appliance channel telemetry for the charger (`kW` & `kWh`). |
 | | Max Current Limit | Diagnostic sensor revealing active baseline capacity limits. |
-| | Session Energy | Continuous tracking of energy accumulated during the active charging sequence (`kWh`). |
-| | Session Duration | Dynamic tracker mapping active transaction runtime boundaries (`Minutes`). |
+| | Session Energy | Continuous tracking of energy accumulated during the active charging sequence (`kWh`). Exposes rich, cleaned transaction metadata natively in attributes. |
+| | Session Duration | Dynamic tracker mapping active transaction runtime boundaries (`Minutes`). Features human-readable `HH:MM:SS` string formatting in attributes. |
 | | Session RFID Token | Identifies the badge credential signature used to authenticate the current session. |
 | **Binary Sensor** | Network Status | Connectivity diagnostic mapping overall cloud framework accessibility. |
 | | Car Connected | Real-time state mapping physical EV connector engagements based on strict IEC standard state codes. |
@@ -47,7 +50,7 @@ A robust custom Home Assistant integration designed to monitor and control **Sma
 | **Number** | Max Current Setting | Directly writes physical building load safety capacity ceilings to the v11 setup registry (`6A` - `32A`). |
 | | Solar Excess | Adjusts minimum excess green energy retention ratios required to trigger dynamic ecosystem generation absorption loops. |
 | | Offline Failsafe Limit | Sets safe backup phase thresholds used during connection drops *(Enforced strict safety validation: slider is only modifiable when Offline Load Management is active)*. |
-| | Charge Target Limit | Triggers instant live action percentage throttle instructions directly on the inverter array. |
+| | Charge Target Limit | Triggers instant live action percentage throttle instructions directly on the inverter array via high-speed MQTT streams. |
 | **Select** | Charging Mode | Dropdown utility shifting balance rules (`standard`, `smart`, `solar`). |
 | | Phase Configuration | Adjusts line alignment phase tracking rotations using structural `PUT` instructions mapping physical building profiles. |
 | **Button** | Pause / Stop | Executes instant parameterless transaction lifecycle interactions. |
@@ -107,7 +110,8 @@ If you prefer manual configuration control over filesystem trees:
 
    ```bash
    config/blueprints/automation/smappee_forgot_badge.yaml
-    ```
+
+   ```
 
 3. Navigate to **Settings -> Automations & Scenes -> Blueprints**, click **Reload Blueprints**, and click **Create Automation**.
 
@@ -120,11 +124,12 @@ logger:
   default: info
   logs:
     custom_components.smappee_ev_charging: debug
+
 ```
 
 ## Contributions are welcome
 
-If you want to contribute to this please read the [Contribution guidelines](CONTRIBUTING.md)
+If you want to contribute to this please read the [Contribution guidelines](https://www.google.com/search?q=CONTRIBUTING.md)
 
 ## Code origin
 
