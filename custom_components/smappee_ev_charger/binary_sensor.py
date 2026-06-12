@@ -1,5 +1,6 @@
 """Set up and manage Smappee Charger binary sensor entities."""
 
+from contextlib import suppress
 import json
 import logging
 
@@ -122,6 +123,9 @@ class SmappeeCarConnectedBinarySensor(SmappeeBaseEntity, BinarySensorEntity):
             device_type="charger",
             platform_domain="binary_sensor",
         )
+        self.mapped_location_id = str(
+            coordinator.config_entry.data.get("station_id") or device_id
+        )
 
     @property
     def unique_id(self) -> str:
@@ -131,52 +135,66 @@ class SmappeeCarConnectedBinarySensor(SmappeeBaseEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         """Return True if a vehicle connection state is discovered via MQTT stream inputs or REST arrays."""
-        # 1. Primary: Evaluate real-time push events parsing incoming MQTT WebSocket payloads
-        if self.coordinator.data and "mqtt_charging_state" in self.coordinator.data:
-            mqtt_payload = self.coordinator.data["mqtt_charging_state"]
-            try:
-                mqtt_json = json.loads(mqtt_payload)
-                if isinstance(mqtt_json, dict):
-                    # Enforce immediate exclusion rules matching the IEC standard state string patterns (A = Disconnected)
-                    iec_status = str(mqtt_json.get("iecStatus", "")).upper()
-                    if iec_status.startswith("A"):
-                        return False
+        data = self.smart_device_data
+        location_id = str(
+            data.get("serviceLocation", self.mapped_location_id)
+            if data
+            else self.mapped_location_id
+        )
 
-                    connection_status = str(
-                        mqtt_json.get("connectionStatus", "")
-                    ).upper()
-                    if connection_status == "DISCONNECTED":
-                        return False
-                    if connection_status == "CONNECTED":
-                        return True
+        # 1. Primary: Evaluate real-time push events from the new multi-location MQTT cache
+        if self.coordinator.data and "mqtt_locations" in self.coordinator.data:
+            location_data = self.coordinator.data["mqtt_locations"].get(location_id, {})
+            mqtt_payload = location_data.get("state")
 
-                    status_obj = mqtt_json.get("status", {})
-                    state = str(
-                        status_obj.get("current", mqtt_json.get("chargingState", ""))
-                    ).upper()
-                    if state in ["AVAILABLE", "DISCONNECTED"]:
-                        return False
-                    if state in [
-                        "CABLE_CONNECTED",
-                        "CHARGING",
-                        "SUSPENDED",
-                        "SUSPENDED_EV",
-                        "SUSPENDED_EVSE",
-                    ]:
-                        return True
+            if mqtt_payload:
+                with suppress(Exception):
+                    mqtt_json = (
+                        mqtt_payload
+                        if isinstance(mqtt_payload, dict)
+                        else json.loads(mqtt_payload)
+                    )
 
-                    if iec_status in ["B1", "B2", "C1", "C2", "D1", "D2"]:
-                        return True
-            except json.JSONDecodeError as err:
-                _LOGGER.debug(
-                    "Failed to decode real-time MQTT payload for car connection state: %s",
-                    err,
-                )
-            except Exception as err:
-                _LOGGER.error(
-                    "Unexpected error processing live car connection binary state: %s",
-                    err,
-                )
+                    if isinstance(mqtt_json, dict):
+                        # IEC Status check
+                        iec_status = str(
+                            mqtt_json.get("iecStatus", {}).get("current")
+                            if isinstance(mqtt_json.get("iecStatus"), dict)
+                            else mqtt_json.get("iecStatus", "")
+                        ).upper()
+
+                        if iec_status.startswith("A"):
+                            return False
+
+                        connection_status = str(
+                            mqtt_json.get("connectionStatus", "")
+                        ).upper()
+                        if connection_status == "DISCONNECTED":
+                            return False
+                        if connection_status == "CONNECTED":
+                            return True
+
+                        # State object check
+                        status_obj = mqtt_json.get("status", {})
+                        state = str(
+                            status_obj.get(
+                                "current", mqtt_json.get("chargingState", "")
+                            )
+                        ).upper()
+
+                        if state in ["AVAILABLE", "DISCONNECTED"]:
+                            return False
+                        if state in [
+                            "CABLE_CONNECTED",
+                            "CHARGING",
+                            "SUSPENDED",
+                            "SUSPENDED_EV",
+                            "SUSPENDED_EVSE",
+                        ]:
+                            return True
+
+                        if iec_status in ["B1", "B2", "C1", "C2", "D1", "D2"]:
+                            return True
 
         # 2. Secondary: Evaluate configuration elements derived from rich v11 cached response blocks
         if (
@@ -192,18 +210,17 @@ class SmappeeCarConnectedBinarySensor(SmappeeBaseEntity, BinarySensorEntity):
                 for module in station_data.get("modules", []):
                     if "carCharger" in module and module["carCharger"]:
                         cc_data = module["carCharger"]
-
                         rest_iec = str(cc_data.get("iecStatus", "")).upper()
                         if rest_iec.startswith("A"):
                             return False
-
                         if cc_data.get("connectionStatus") == "DISCONNECTED":
                             return False
                         if cc_data.get("connectionStatus") == "CONNECTED":
                             return True
 
-                        status_dict = cc_data.get("status", {})
-                        rest_state = str(status_dict.get("current", "")).upper()
+                        rest_state = str(
+                            cc_data.get("status", {}).get("current", "")
+                        ).upper()
                         if rest_state in ["AVAILABLE", "DISCONNECTED"]:
                             return False
                         if rest_state in [
@@ -214,40 +231,14 @@ class SmappeeCarConnectedBinarySensor(SmappeeBaseEntity, BinarySensorEntity):
                             "SUSPENDED_EVSE",
                         ]:
                             return True
-
                         if rest_iec in ["B1", "B2", "C1", "C2", "D1", "D2"]:
                             return True
 
-        # 3. Fallback: Parse parameter records stored across generic flat v10 configuration properties
+        # 3. Fallback: Parse parameter records stored in smart_device_data
         data = self.smart_device_data
-        if data:
-            rest_iec = str(data.get("iecStatus", "")).upper()
-            if rest_iec.startswith("A"):
-                return False
-
-            if data.get("connectionStatus") == "DISCONNECTED":
-                return False
-            if data.get("connectionStatus") == "CONNECTED":
-                return True
-
-            if "carCharger" in data:
-                cc_data = data["carCharger"]
-                if str(cc_data.get("iecStatus", "")).upper().startswith("A"):
-                    return False
-                if cc_data.get("connectionStatus") == "DISCONNECTED":
-                    return False
-
-                status_dict = cc_data.get("status", {})
-                state = str(status_dict.get("current", "")).upper()
-                if state in ["AVAILABLE", "DISCONNECTED"]:
-                    return False
-                if state in [
-                    "CABLE_CONNECTED",
-                    "CHARGING",
-                    "SUSPENDED",
-                    "SUSPENDED_EV",
-                    "SUSPENDED_EVSE",
-                ]:
-                    return True
+        if data and "carCharger" in data:
+            cc_data = data["carCharger"]
+            state = str(cc_data.get("status", {}).get("current", "")).upper()
+            return state not in ["AVAILABLE", "DISCONNECTED"]
 
         return False
