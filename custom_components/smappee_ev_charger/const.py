@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Final
 
 MANUFACTURER: Final = "Smappee"
-CONFIGURATIN_URL: Final = "https://dashboard.smappee.net"
+CONFIGURATION_URL: Final = "https://dashboard.smappee.net"
 
 ATTRIBUTION: Final = f"Data provided by {MANUFACTURER}"
 
