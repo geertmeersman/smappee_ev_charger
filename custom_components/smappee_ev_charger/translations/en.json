@@ -130,9 +130,6 @@
       "session_energy": {
         "name": "Session energy"
       },
-      "session_rfid": {
-        "name": "Session RFID"
-      },
       "session_status": {
         "name": "Session status"
       },

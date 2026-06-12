@@ -42,7 +42,6 @@ A robust custom Home Assistant integration designed to monitor and control **Sma
 | | Max Current Limit | Diagnostic sensor revealing active baseline capacity limits. |
 | | Session Energy | Continuous tracking of energy accumulated during the active charging sequence (`kWh`). Exposes rich, cleaned transaction metadata natively in attributes. |
 | | Session Duration | Dynamic tracker mapping active transaction runtime boundaries (`Minutes`). Features human-readable `HH:MM:SS` string formatting in attributes. |
-| | Session RFID Token | Identifies the badge credential signature used to authenticate the current session. |
 | **Binary Sensor** | Network Status | Connectivity diagnostic mapping overall cloud framework accessibility. |
 | | Car Connected | Real-time state mapping physical EV connector engagements based on strict IEC standard state codes. |
 | **Switch** | Charger Availability | Toggles overall public validation states to lock down or open up station access. |

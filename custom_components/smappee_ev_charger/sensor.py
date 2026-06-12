@@ -68,9 +68,6 @@ async def async_setup_entry(
                         SmappeeSessionEnergySensor(
                             coordinator, client, entry.title, device_id
                         ),
-                        SmappeeSessionRfidSensor(
-                            coordinator, client, entry.title, device_id
-                        ),
                     ]
                 )
 
@@ -474,23 +471,6 @@ class SmappeeSessionEnergySensor(SmappeeBaseSessionSensor):
         }
 
         return attributes
-
-
-class SmappeeSessionRfidSensor(SmappeeBaseSessionSensor):
-    """Track the identifier token credentials matching authenticated authorizations."""
-
-    _attr_translation_key = "session_rfid"
-    _attr_icon = "mdi:card-account-details"
-
-    @property
-    def unique_id(self) -> str:
-        """Return a unique ID for this entity."""
-        return f"{self.device_id}_session_rfid"
-
-    @property
-    def native_value(self) -> Any:
-        """Return the authenticated RFID tag value for the active session."""
-        return self.active_session_data.get("rfid")
 
 
 class SmappeeMatrixSensor(

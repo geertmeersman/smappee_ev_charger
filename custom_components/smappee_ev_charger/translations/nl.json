@@ -130,9 +130,6 @@
       "session_energy": {
         "name": "Sessie energie"
       },
-      "session_rfid": {
-        "name": "Sessie RFID"
-      },
       "session_status": {
         "name": "Sessie status"
       },
