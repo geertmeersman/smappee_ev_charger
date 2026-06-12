@@ -194,7 +194,7 @@ class SmappeeBaseEntity(CoordinatorEntity[SmappeeDataUpdateCoordinator]):
             return DeviceInfo(
                 identifiers={(DOMAIN, self.device_id)},
                 name=f"{display_name} - {custom_name}",
-                manufacturer=DOMAIN,
+                manufacturer=MANUFACTURER,
                 configuration_url=CONFIGURATION_URL,
                 model=data.get("type", {}).get("name", "acledcontroller"),
                 via_device=parent_identifier if parent_identifier else None,
@@ -231,7 +231,7 @@ class SmappeeBaseEntity(CoordinatorEntity[SmappeeDataUpdateCoordinator]):
         return DeviceInfo(
             identifiers={(DOMAIN, station_serial)},
             name=device_name,
-            manufacturer=DOMAIN,
+            manufacturer=MANUFACTURER,
             model=model_name.replace("_", " ").title(),
             sw_version=serial_number,
             configuration_url=CONFIGURATION_URL,
