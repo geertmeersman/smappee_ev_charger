@@ -24,7 +24,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MANUFACTURER
+from .const import CONFIGURATION_URL, DOMAIN, MANUFACTURER
 from .coordinator import SmappeeDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -194,9 +194,9 @@ class SmappeeBaseEntity(CoordinatorEntity[SmappeeDataUpdateCoordinator]):
             return DeviceInfo(
                 identifiers={(DOMAIN, self.device_id)},
                 name=f"{display_name} - {custom_name}",
-                manufacturer="Smappee",
+                manufacturer=MANUFACTURER,
+                configuration_url=CONFIGURATION_URL,
                 model=data.get("type", {}).get("name", "acledcontroller"),
-                sw_version=self.device_id,
                 via_device=parent_identifier if parent_identifier else None,
             )
 
@@ -209,6 +209,7 @@ class SmappeeBaseEntity(CoordinatorEntity[SmappeeDataUpdateCoordinator]):
         model_name = data.get("model", "WALL_QUANTUM_CABLE")
 
         device_name = "Smappee Charging Station - EV Wall"
+        serial_number = ""
         if self.coordinator.data and "smart_devices" in self.coordinator.data:
             smart_devices = self.coordinator.data["smart_devices"]
             charging_station_data = next(
@@ -225,13 +226,15 @@ class SmappeeBaseEntity(CoordinatorEntity[SmappeeDataUpdateCoordinator]):
                 )
                 custom_name = charging_station_data.get("name", "EV Wall")
                 device_name = f"{display_name} - {custom_name}"
+                serial_number = charging_station_data.get("serialNumber", "")
 
         return DeviceInfo(
             identifiers={(DOMAIN, station_serial)},
             name=device_name,
-            manufacturer="Smappee",
+            manufacturer=MANUFACTURER,
             model=model_name.replace("_", " ").title(),
-            sw_version=self.device_id,
+            sw_version=serial_number,
+            configuration_url=CONFIGURATION_URL,
             via_device=parent_identifier if parent_identifier else None,
         )
 

@@ -11,7 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import paho.mqtt.client as mqtt_paho
 
 from .client import SmappeeClient
-from .const import DOMAIN, STARTUP
+from .const import CONFIGURATION_URL, DOMAIN, MANUFACTURER, STARTUP
 from .coordinator import SmappeeDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -110,8 +110,9 @@ def _register_parent_location_device(
             config_entry_id=entry.entry_id,
             identifiers={(DOMAIN, f"location_{parent_loc_id}")},
             name=f"Smappee {parent_name}",
-            manufacturer="Smappee",
+            manufacturer=MANUFACTURER,
             model="Central Gateway / Service Location",
+            configuration_url=CONFIGURATION_URL,
             entry_type=dr.DeviceEntryType.SERVICE,
         )
         _LOGGER.info(
