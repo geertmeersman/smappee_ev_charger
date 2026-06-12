@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.3.2](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.3.2) (2026-06-12)
+
+[Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.3.1...v0.3.2)
+
+**Merged pull requests:**
+
+- refactor: remove session RFID sensor and related translations [\#17](https://github.com/geertmeersman/smappee_ev_charger/pull/17) ([geertmeersman](https://github.com/geertmeersman))
+- docs: add Lovelace dashboard example and associated image [\#16](https://github.com/geertmeersman/smappee_ev_charger/pull/16) ([geertmeersman](https://github.com/geertmeersman))
+
 ## [v0.3.1](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.3.1) (2026-06-12)
 
 [Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.3.0...v0.3.1)
