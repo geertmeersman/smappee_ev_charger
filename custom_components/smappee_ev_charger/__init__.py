@@ -259,53 +259,51 @@ async def _setup_mqtt_stream(
                         }
 
                     # CHANNEL A: Targeted charger hardware status update streaming payload context
-                    if current_topic == charging_topic:
+                    if (
+                        "/property/chargingstate" in current_topic
+                        or current_topic == charging_topic
+                    ):
                         try:
-                            coordinator.data["mqtt_locations"][l_id]["state"] = (
-                                json.loads(payload)
+                            parsed_state = json.loads(payload)
+                            coordinator.data["mqtt_locations"][l_id][
+                                "state"
+                            ] = parsed_state
+
+                            # Execute quick validation parsing strictly to satisfy dynamic execution timer context parameters
+                            status_obj = parsed_state.get("status", {})
+                            state_val = str(
+                                status_obj.get(
+                                    "current", parsed_state.get("chargingState", "")
+                                )
+                            ).upper()
+                            coordinator.timer_context["handler"](
+                                state_val == "CHARGING"
                             )
+
                         except json.JSONDecodeError:
                             _LOGGER.warning(
                                 "Failed to decode charging state payload: %s", payload
                             )
-                            coordinator.data["mqtt_locations"][l_id]["state"] = {}
-
-                        # Execute quick validation parsing strictly to satisfy dynamic execution timer context parameters
-                        try:
-                            mqtt_json = json.loads(payload)
-                            if isinstance(mqtt_json, dict):
-                                status_obj = mqtt_json.get("status", {})
-                                state = str(
-                                    status_obj.get(
-                                        "current", mqtt_json.get("chargingState", "")
-                                    )
-                                ).upper()
-                                coordinator.timer_context["handler"](
-                                    state == "CHARGING"
-                                )
                         except Exception as err:
                             _LOGGER.error(
                                 "Failed calculating transient execution bounds: %s", err
                             )
 
-                    # CHANNEL B: Dense sequential matrix telemetry registers
-                    else:
+                    # CHANNEL B: Dense sequential matrix telemetry registers (Power)
+                    elif "/power" in current_topic:
                         try:
-                            parsed_json = json.loads(payload)
-                            if isinstance(parsed_json, dict) and (
-                                "activePowerData" in parsed_json
-                                or "importActiveEnergyData" in parsed_json
-                                or "channelData" in parsed_json
-                            ):
-                                coordinator.data["mqtt_locations"][l_id][
-                                    "power"
-                                ] = parsed_json
-                            else:
-                                coordinator.data["mqtt_locations"][l_id][
-                                    "power"
-                                ] = payload
+                            parsed_power = json.loads(payload)
+                            coordinator.data["mqtt_locations"][l_id][
+                                "power"
+                            ] = parsed_power
                         except Exception:
                             coordinator.data["mqtt_locations"][l_id]["power"] = payload
+
+                    else:
+                        _LOGGER.debug(
+                            "Ignored MQTT topic (no power or state): %s", current_topic
+                        )
+                        return
 
                     # Forward state modifications directly downstream into core platform tracker classes
                     coordinator.async_set_updated_data(coordinator.data)

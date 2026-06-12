@@ -115,9 +115,6 @@
       "led_brightness": {
         "name": "LED brightness"
       },
-      "live_power": {
-        "name": "Live power"
-      },
       "max_current_limit": {
         "name": "Max current limit"
       },

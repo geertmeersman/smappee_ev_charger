@@ -27,6 +27,7 @@ class SmappeeClient:
         self.session = session
 
         self.token: str | None = None
+        self.refresh_token: str | None = None  # NEW
         self.token_expires_at: int = 0
         self.user_id: str | None = None
 
@@ -36,31 +37,62 @@ class SmappeeClient:
         self.rfid_device_id: str | None = None
 
     async def authenticate(self) -> bool:
-        """Authenticate session credentials against the Smappee dashboard portal login gateway."""
+        """Authenticate using stored refresh token if valid, otherwise perform login."""
         current_time_ms = int(time.time() * 1000)
-        if self.token and self.token_expires_at > (current_time_ms + 30000):
+
+        # 1. If we have a valid access token, use it
+        if self.token and self.token_expires_at > (current_time_ms + 60000):
             return True
 
+        # 2. Try to refresh the token if we have a refresh_token
+        if self.refresh_token:
+            if await self._perform_refresh():
+                return True
+
+        # 3. Fallback to full login if refresh failed or not available
+        return await self._perform_login()
+
+    async def _perform_login(self) -> bool:
+        """Perform full credentials login."""
         url = f"{DASHAPI_URL}/login"
         payload = {"userName": self.username, "password": self.password}
-        headers = {"content-type": "application/json"}
+        try:
+            async with self.session.post(url, json=payload) as response:
+                if response.status != 200:
+                    _LOGGER.warning(
+                        "Credential login failed with status %s", response.status
+                    )
+                    return False
+                data = await response.json()
+                self._update_token_data(data)
+                return bool(self.token)
+        except Exception as err:
+            _LOGGER.error("Credential login request failed: %s", err)
+            return False
+
+    async def _perform_refresh(self) -> bool:
+        """Refresh the access token using the stored refresh token."""
+        url = f"{DASHAPI_URL}/refreshToken"
+        payload = {"refreshToken": self.refresh_token, "language": "nl"}
 
         try:
-            async with self.session.post(
-                url, json=payload, headers=headers
-            ) as response:
+            async with self.session.post(url, json=payload) as response:
                 if response.status == 200:
                     data = await response.json()
-                    self.token = data.get("token")
-                    self.token_expires_at = data.get("tokenExpirationTimestamp", 0)
-                    self.user_id = data.get("userId")
+                    self._update_token_data(data)
                     return True
-                return False
         except Exception as err:
-            _LOGGER.error(
-                "Failed to authenticate session credentials against gateway: %s", err
+            _LOGGER.warning(
+                "Refresh token expired or invalid, re-authenticating: %s", err
             )
-            return False
+        return False
+
+    def _update_token_data(self, data: dict) -> None:
+        """Update internal token state."""
+        self.token = data.get("token")
+        self.refresh_token = data.get("refreshToken")
+        self.token_expires_at = data.get("tokenExpirationTimestamp", 0)
+        self.user_id = data.get("userId")
 
     async def get_headers(self) -> dict[str, str]:
         """Generate and append active token signatures into HTTP connection header arrays."""
