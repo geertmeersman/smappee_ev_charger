@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.3.3](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.3.3) (2026-06-12)
+
+[Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.3.2...v0.3.3)
+
+**Merged pull requests:**
+
+- refactor: enhance car connection state evaluation logic and add locat… [\#19](https://github.com/geertmeersman/smappee_ev_charger/pull/19) ([geertmeersman](https://github.com/geertmeersman))
+- refactor: improve comments and organization in sync workflow [\#18](https://github.com/geertmeersman/smappee_ev_charger/pull/18) ([geertmeersman](https://github.com/geertmeersman))
+
 ## [v0.3.2](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.3.2) (2026-06-12)
 
 [Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.3.1...v0.3.2)
