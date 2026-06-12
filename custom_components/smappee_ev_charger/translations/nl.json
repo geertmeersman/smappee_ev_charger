@@ -106,9 +106,6 @@
           "suspended_evse": "Gepauzeerd door laadpaal"
         }
       },
-      "charger_total_energy": {
-        "name": "Totale energie"
-      },
       "charging_mode": {
         "name": "Laadmodus (Sensor)"
       },

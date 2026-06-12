@@ -287,7 +287,7 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "grid": {
                 "energy": [],
                 "array_key": "importActiveEnergyData",
-            },
+            },  # Standaard naar Energy
             "pv": {"energy": [], "array_key": "importActiveEnergyData"},
             "cars": {},
         }
@@ -297,14 +297,13 @@ class SmappeeDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             mtype = str(meas.get("type", "")).upper()
             channels = meas.get("updateChannels", {})
 
-            # Extract the raw indices using meterReadings if available
             reading_source = (
                 channels.get("meterReadings") or channels.get("activePower") or {}
             )
             aspect_paths = reading_source.get("aspectPaths") or []
 
             indices = []
-            array_source = "importActiveEnergyData"
+            array_source = "importActiveEnergyData"  # Default voor Energy
 
             for path_obj in aspect_paths:
                 path_str = path_obj.get("path", "")

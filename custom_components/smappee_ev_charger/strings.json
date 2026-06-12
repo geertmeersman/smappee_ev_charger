@@ -106,9 +106,6 @@
           "suspended_evse": "Paused by charger"
         }
       },
-      "charger_total_energy": {
-        "name": "Total energy"
-      },
       "charging_mode": {
         "name": "Charging mode"
       },
