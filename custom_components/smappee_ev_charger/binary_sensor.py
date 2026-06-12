@@ -123,7 +123,9 @@ class SmappeeCarConnectedBinarySensor(SmappeeBaseEntity, BinarySensorEntity):
             device_type="charger",
             platform_domain="binary_sensor",
         )
-        self.mapped_location_id = str(coordinator.config_entry.data.get("station_id"))
+        self.mapped_location_id = str(
+            coordinator.config_entry.data.get("station_id") or device_id
+        )
 
     @property
     def unique_id(self) -> str:
@@ -133,14 +135,17 @@ class SmappeeCarConnectedBinarySensor(SmappeeBaseEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         """Return True if a vehicle connection state is discovered via MQTT stream inputs or REST arrays."""
+        data = self.smart_device_data
         location_id = str(
-            self.smart_device_data.get("serviceLocation", self.mapped_location_id)
+            data.get("serviceLocation", self.mapped_location_id)
+            if data
+            else self.mapped_location_id
         )
 
         # 1. Primary: Evaluate real-time push events from the new multi-location MQTT cache
         if self.coordinator.data and "mqtt_locations" in self.coordinator.data:
             location_data = self.coordinator.data["mqtt_locations"].get(location_id, {})
-            mqtt_payload = location_data.get("state")  # Dit is nu het juiste pad!
+            mqtt_payload = location_data.get("state")
 
             if mqtt_payload:
                 with suppress(Exception):
