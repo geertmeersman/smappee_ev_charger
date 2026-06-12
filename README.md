@@ -129,7 +129,7 @@ logger:
 
 ## Contributions are welcome
 
-If you want to contribute to this please read the [Contribution guidelines](https://www.google.com/search?q=CONTRIBUTING.md)
+If you want to contribute to this please read the [Contribution guidelines](CONTRIBUTING.md)
 
 ## Code origin
 
