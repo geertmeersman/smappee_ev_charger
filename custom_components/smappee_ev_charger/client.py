@@ -56,13 +56,19 @@ class SmappeeClient:
         """Perform full credentials login."""
         url = f"{DASHAPI_URL}/login"
         payload = {"userName": self.username, "password": self.password}
-
-        async with self.session.post(url, json=payload) as response:
-            if response.status == 200:
+        try:
+            async with self.session.post(url, json=payload) as response:
+                if response.status != 200:
+                    _LOGGER.warning(
+                        "Credential login failed with status %s", response.status
+                    )
+                    return False
                 data = await response.json()
                 self._update_token_data(data)
-                return True
-        return False
+                return bool(self.token)
+        except Exception as err:
+            _LOGGER.error("Credential login request failed: %s", err)
+            return False
 
     async def _perform_refresh(self) -> bool:
         """Refresh the access token using the stored refresh token."""
