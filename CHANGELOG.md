@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.3.1](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.3.1) (2026-06-12)
+
+[Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.3.0...v0.3.1)
+
+**Merged pull requests:**
+
+- fix: correct CONFIGURATION\_URL typo and update documentation link in manifest [\#15](https://github.com/geertmeersman/smappee_ev_charger/pull/15) ([geertmeersman](https://github.com/geertmeersman))
+- docs: update README to include new sensor features and enhance configuration instructions [\#14](https://github.com/geertmeersman/smappee_ev_charger/pull/14) ([geertmeersman](https://github.com/geertmeersman))
+
 ## [v0.3.0](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.3.0) (2026-06-12)
 
 [Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.2.0...v0.3.0)
