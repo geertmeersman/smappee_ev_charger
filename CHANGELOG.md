@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.3.4](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.3.4) (2026-06-12)
+
+[Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.3.3...v0.3.4)
+
+**Merged pull requests:**
+
+- refactor: update energy mapping and add total energy sensor for car charger [\#20](https://github.com/geertmeersman/smappee_ev_charger/pull/20) ([geertmeersman](https://github.com/geertmeersman))
+
 ## [v0.3.3](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.3.3) (2026-06-12)
 
 [Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.3.2...v0.3.3)
