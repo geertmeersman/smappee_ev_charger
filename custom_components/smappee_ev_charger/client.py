@@ -398,7 +398,6 @@ class SmappeeClient:
         headers = await self.get_headers()
         url = f"{API_BASE_URL}/{SERVICELOCATIONS_API_VERSION}/chargingstations/{self.charging_station_serial}"
         payload = {"offlineCharging": {"enabled": enabled, "failSafe": failsafe_amps}}
-        _LOGGER.critical(payload)
 
         try:
             async with self.session.patch(
@@ -489,9 +488,6 @@ class SmappeeClient:
             f"/homecontrol/smart/devices/{device_id}/config"
         )
         payload = [{"spec": {"name": property_name}, "values": [value_dict]}]
-
-        _LOGGER.critical(payload)
-        _LOGGER.critical(url)
 
         try:
             _LOGGER.debug(
