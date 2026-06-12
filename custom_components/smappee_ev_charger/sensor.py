@@ -1,7 +1,7 @@
 """Set up and manage Smappee Charger sensor entities."""
 
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 from typing import Any
@@ -57,9 +57,6 @@ async def async_setup_entry(
                 entities.extend(
                     [
                         SmappeeStatusSensor(
-                            coordinator, client, entry.title, device_id
-                        ),
-                        SmappeeLivePowerSensor(
                             coordinator, client, entry.title, device_id
                         ),
                         SmappeeMaxCurrentLimitSensor(
@@ -349,56 +346,6 @@ class SmappeeStatusSensor(SmappeeBaseEntity, SensorEntity):
         return "available"
 
 
-class SmappeeLivePowerSensor(SmappeeBaseEntity, SensorEntity):
-    """Monitor the real-time active power delivery tracking in kilowatts."""
-
-    _attr_translation_key = "live_power"
-    _attr_device_class = SensorDeviceClass.POWER
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
-    _attr_suggested_display_precision = 2
-    _attr_icon = "mdi:flash"
-
-    def __init__(self, coordinator, client, entry_title, device_id: str) -> None:
-        """Initialize the Smappee live power sensor."""
-        super().__init__(coordinator, client, entry_title, device_id=device_id)
-
-    @property
-    def unique_id(self) -> str:
-        """Return a unique ID for this entity."""
-        return f"{self.device_id}_live_power"
-
-    @property
-    def native_value(self) -> float | None:
-        """Calculate active phase telemetry power values for the charger dynamically."""
-        raw_watts = None
-
-        if self.coordinator.data and "mqtt_locations" in self.coordinator.data:
-            entry_loc_id = str(self.entry_title)
-            if "smart_devices" in self.coordinator.data:
-                for dev in self.coordinator.data["smart_devices"]:
-                    if dev.get("id") == self.device_id and dev.get("serviceLocation"):
-                        entry_loc_id = str(dev.get("serviceLocation"))
-                        break
-
-            location_data = self.coordinator.data["mqtt_locations"].get(
-                entry_loc_id, {}
-            )
-            mqtt_data = location_data.get("power")
-
-            if isinstance(mqtt_data, dict) and "activePowerData" in mqtt_data:
-                power_array = mqtt_data.get("activePowerData")
-                if isinstance(power_array, list) and len(power_array) >= 3:
-                    raw_watts = float(sum(power_array[:3]))
-
-        if raw_watts is None:
-            data = self.smart_device_data
-            if data:
-                raw_watts = float(data.get("livePower", 0.0))
-
-        return round(raw_watts / 1000.0, 2) if raw_watts is not None else 0.00
-
-
 class SmappeeMaxCurrentLimitSensor(SmappeeBaseEntity, SensorEntity):
     """Read the upper safe hardware phase current boundaries configured on the station."""
 
@@ -451,7 +398,7 @@ class SmappeeSessionDurationSensor(SmappeeBaseSessionSensor):
 
     @property
     def native_value(self) -> float:
-        """Compute running running session timestamps out to elapsed delta minutes."""
+        """Compute running session timestamps out to elapsed delta minutes."""
         session = self.active_session_data
         if not session or not session.get("from"):
             return 0.0
@@ -468,6 +415,27 @@ class SmappeeSessionDurationSensor(SmappeeBaseSessionSensor):
             return round((end_time - start_time).total_seconds() / 60.0, 1)
         except Exception:
             return 0.0
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the duration in a human-readable HH:MM:SS format."""
+        minutes = self.native_value
+        if minutes <= 0:
+            return {"duration_formatted": "00:00:00"}
+
+        delta = timedelta(minutes=float(minutes))
+
+        hours, remainder = divmod(int(delta.total_seconds()), 3600)
+        minutes_fmt, seconds = divmod(remainder, 60)
+
+        formatted = f"{hours:02}:{minutes_fmt:02}:{seconds:02}"
+
+        return {
+            "duration_formatted": formatted,
+            "hours": hours,
+            "minutes": minutes_fmt,
+            "seconds": seconds,
+        }
 
 
 class SmappeeSessionEnergySensor(SmappeeBaseSessionSensor):
@@ -488,6 +456,21 @@ class SmappeeSessionEnergySensor(SmappeeBaseSessionSensor):
     def native_value(self) -> float:
         """Return the current energy consumption for the active session."""
         return round(float(self.active_session_data.get("energy", 0.0)), 2)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return all session details as attributes, filtering out unwanted keys."""
+        session = self.active_session_data
+        if not session:
+            return {}
+
+        excluded_keys = {"address", "station", "controller", "updateChannels"}
+
+        attributes = {
+            key: value for key, value in session.items() if key not in excluded_keys
+        }
+
+        return attributes
 
 
 class SmappeeSessionRfidSensor(SmappeeBaseSessionSensor):
@@ -773,6 +756,7 @@ class SmappeeMatrixSensor(
 
         dynamic_indices = list(set(dynamic_indices))
 
+        # 5. Shift back to flat activePowerData arrays ONLY if no specific indices were resolved
         if is_power_sensor:
             if not dynamic_indices:
                 dynamic_array_key = "activePowerData"
