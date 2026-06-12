@@ -27,10 +27,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Fetch latest state of tracking branches
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
           git fetch origin main dev-current
 
-          # Check if dev-current exists on remote and if it has unmerged work
+          git checkout main
+          git reset --hard origin/main
+
           if git show-ref --verify --quiet refs/remotes/origin/dev-current; then
             ahead=$(git rev-list --count origin/main..origin/dev-current)
             if [ "$ahead" -gt 0 ]; then
@@ -41,7 +45,5 @@ jobs:
           fi
 
           echo "INFO: Syncing dev-current with main..."
-          # Checkout main locally, create/reset dev-current to track it, and force push
-          git checkout main
           git checkout -B dev-current
           git push origin dev-current --force-with-lease
