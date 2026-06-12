@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.3.0](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.3.0) (2026-06-12)
+
+[Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.2.0...v0.3.0)
+
+**Merged pull requests:**
+
+- feat: implement refresh token handling and enhance authentication flo… [\#13](https://github.com/geertmeersman/smappee_ev_charger/pull/13) ([geertmeersman](https://github.com/geertmeersman))
+- fix: remove concurrency settings from release workflow [\#12](https://github.com/geertmeersman/smappee_ev_charger/pull/12) ([geertmeersman](https://github.com/geertmeersman))
+
 ## [v0.2.0](https://github.com/geertmeersman/smappee_ev_charger/tree/v0.2.0) (2026-06-11)
 
 [Full Changelog](https://github.com/geertmeersman/smappee_ev_charger/compare/v0.1.2...v0.2.0)
